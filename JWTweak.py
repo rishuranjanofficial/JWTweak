@@ -233,8 +233,9 @@ def jwtWeak():
                 b64_encoded_header = str(b64_Header, "utf-8")
                 mod_payload=str(mod_payload)
                 b64_Payload = base64.b64encode(mod_payload.encode("utf-8"))
-                b64_encoded_Payload = str(b64_Payload, "utf-8") 
-                encoded_HS256 = jwt.encode(mod_payload, 'adadwfff', algorithm='HS256')  
+                b64_encoded_Payload = str(b64_Payload, "utf-8")
+                json_mod_payload=json.loads(mod_payload)
+                encoded_HS256 = jwt.encode(json_mod_payload, 'adadwfff', algorithm='HS256')  
                 print(f"{bcolors.OKGREEN}\n\tThe New JWT Token with Algorithm changed to 'HS256':\n\t"+b64_encoded_header+"."+b64_encoded_Payload+"."+f"{bcolors.OKGREEN}{bcolors.ENDC}")
             elif not mod_payload:
                 print(f"{bcolors.OKBLUE}\n\tThe payload is unchanged{bcolors.ENDC}")
@@ -261,7 +262,7 @@ def jwtWeak():
             print("Feature coming soon")
         
         
-        elif choice=="Q" or choice=="q"
+        elif choice=="Q" or choice=="q":
             sys.exit
         else:
             print("You must only select either A,B,C,D,E or F.")
