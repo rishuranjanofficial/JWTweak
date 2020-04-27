@@ -1,7 +1,5 @@
 # JWTweak
 
-## JWTweak v0.1
-
 ### Introduction
 This tool is basically designed to automate the progress of changing the JWT algorithm of input JWT Token and then generate the new JWT based on changed algorithm.
 
