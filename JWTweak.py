@@ -249,14 +249,23 @@ def jwtWeak():
                 print("Not Valid Payload") 
             
 #######################################################################################
-        #elif choice=="E" or choice=="e"
+#Generate JWT Token with Algorithm type 'HS384'
 #######################################################################################
-        #elif choice=="Q" or choice=="q"
-         #SS       sys.exit
+        elif choice == "E" or choice =="e":
+            print("Feature coming soon")        
+        
+#######################################################################################
+#Generate JWT Token with Algorithm type 'HS512'
+#######################################################################################       
+        elif choice == "F" or choice =="f":
+            print("Feature coming soon")
+        
+        
+        elif choice=="Q" or choice=="q"
+            sys.exit
         else:
             print("You must only select either A,B,C,D,E or F.")
-            print("Please try again")
-                
+            print("Please try again")                
     
     else:
         print(f"{bcolors.FAIL}\nThis is not a valid input JWT Token{bcolors.ENDC}\n")
