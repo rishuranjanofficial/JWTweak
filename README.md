@@ -7,6 +7,7 @@ This tool is basically designed to automate the progress of changing the JWT alg
 - Check how strong is the JWT Token.
 - Break JWT Token which supports either algorithm 'None' or 'HS256/384/512'
 
+### [Changelogs](https://github.com/rishuranjanofficial/JWTweak/blob/master/Changelogs)
 
 ### Read more
 - [JWT Attack Walk-Through-NCC Group](https://www.nccgroup.trust/uk/about-us/newsroom-and-events/blogs/2019/january/jwt-attack-walk-through/)
