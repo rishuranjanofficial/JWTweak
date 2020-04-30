@@ -8,3 +8,7 @@
 ## Version-1.1 (29-Apr-2020)
 ##Feature
 - Exception Handling implemented
+
+## Version-1.1.1 (30-Apr-2020)
+##Feature
+- Bug fixes

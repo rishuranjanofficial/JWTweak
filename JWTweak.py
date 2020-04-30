@@ -1,4 +1,4 @@
-#JWTweak-v1.1
+#JWTweak-v1.1.1
 import os
 import jwt
 import re
@@ -25,7 +25,6 @@ def jwtWeak():
         print(f"{bcolors.OKGREEN}\nThis is a valid input JWT Token{bcolors.ENDC}\n")
         print(f"{bcolors.BOLD}*************************************************MAIN MENU*************************************************")
 
-
         choice = input("""
                       1: Detect the algorithm of the input JWT Token
                       2: Base64 decode the input JWT Token
@@ -51,7 +50,7 @@ def jwtWeak():
                     req_str = base64.b64decode(Header)
                 else:
                     req_str = base64.b64decode(Header)
-                    str_req_str=req_str.decode('utf-8')
+                str_req_str=req_str.decode('utf-8')
                 json_header = json.loads(str_req_str)
                 algo=json_header['alg']
                 print("\nThe present algorithm of input JWT Token- "+f"{bcolors.OKGREEN}"+f"{bcolors.BOLD}"+ algo+f"{bcolors.UNDERLINE}{bcolors.ENDC}\n")
@@ -86,7 +85,7 @@ def jwtWeak():
                     req_str = base64.b64decode(Header)
                 else:
                     req_str = base64.b64decode(Header)
-                    req_str=req_str.decode('utf-8')
+                req_str=req_str.decode('utf-8')
                 #base64 decoded Header
                 print("\nHeader="+str(req_str))
 
@@ -129,7 +128,7 @@ def jwtWeak():
                     req_str = base64.b64decode(Header)
                 else:
                     req_str = base64.b64decode(Header)
-                    req_str=req_str.decode('utf-8')
+                req_str=req_str.decode('utf-8')
                 json_header = json.loads(req_str)
                 algo=json_header['alg']
                 print(f"{bcolors.WARNING}\nBefore Algorithm Coversion:{bcolors.ENDC}")
@@ -200,7 +199,7 @@ def jwtWeak():
                     req_str = base64.b64decode(Header)
                 else:
                     req_str = base64.b64decode(Header)
-                    req_str=req_str.decode('utf-8')
+                req_str=req_str.decode('utf-8')
                 b64_decoded_header=req_str
                 json_header = json.loads(req_str)
                 algo=json_header['alg']
