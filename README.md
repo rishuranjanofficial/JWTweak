@@ -1,7 +1,7 @@
 # JWTweak
 
 ### Introduction
-This tool is designed to automate the process of modifying the JWT algorithm of input JWT Token and then generate the new JWT based on the new algorithm.
+With the global increase in JSON Web Token (JWT) usage, the attack surface has also increased significantly. Having said that, this utility is designed with the aim to generate the new JWT token with little or no time which would help security enthusiasts to find security flaws in JWT implementation. This tool is designed to automate the process of modifying the JWT algorithm of input JWT Token and then generate the new JWT based on the new algorithm.
 
 #### Features
 - Detects the algorithm of the input JWT Token 
