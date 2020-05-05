@@ -17,4 +17,7 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 - [JWT Attack Walk-Through-NCC Group](https://www.nccgroup.trust/uk/about-us/newsroom-and-events/blogs/2019/january/jwt-attack-walk-through/)
 - [Hack the JWT Token-Habr](https://habr.com/en/post/450054/)
 
-#### Please connect on [Linkedin](https://www.linkedin.com/in/rishuranjan/) and ![](https://img.shields.io/twitter/follow/tweetit_rrj?style=social), if you have any query, suggestion or feedback.
+#### Please connect, if you have any query, suggestion or feedback.
+[![](https://static-exp1.licdn.com/sc/h/95o6rrc5ws6mlw6wqzy0xgj7y)](https://www.linkedin.com/in/rishuranjan/) 
+
+![](https://img.shields.io/twitter/follow/tweetit_rrj?style=social)
