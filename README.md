@@ -18,7 +18,7 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 - Generate new JWT Token by changing the algorithm of the input JWT to 'HS384' 
 - Generate new JWT Token by changing the algorithm of the input JWT to 'HS512'    
 
-![jwtweak](https://user-images.githubusercontent.com/51092706/81255906-9205f680-904c-11ea-85c7-6d1a4fb9335c.png)
+![jwtweak](https://user-images.githubusercontent.com/51092706/81257713-9ed91900-9051-11ea-9db1-23ba2ea5b22a.png)
 
 
 ## Read where it can help
@@ -27,4 +27,3 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 
 ## Please connect, if you have any query, suggestion or feedback.
 [![](https://img.shields.io/twitter/follow/tweetit_rrj?style=social)](https://twitter.com/intent/follow?screen_name=tweetit_rrj)  [![](https://static-exp1.licdn.com/sc/h/95o6rrc5ws6mlw6wqzy0xgj7y)](https://www.linkedin.com/in/rishuranjan/)
-
