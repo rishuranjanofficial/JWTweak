@@ -23,19 +23,21 @@ def jwtWeak():
     in_jwt = input()
 
     if re.match(r'^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$',in_jwt):
-        print(f"{bcolors.OKGREEN}\nThis is a valid input JWT Token{bcolors.ENDC}\n")
-        print(f"{bcolors.BOLD}*************************************************MAIN MENU*************************************************")
+        print(f"{bcolors.OKGREEN}\nThis is a valid input JWT Token{bcolors.ENDC}")
+        print(f"{bcolors.BOLD}")
 
         choice = input("""
-                      1: Detect the algorithm of the input JWT Token
-                      2: Base64 decode the input JWT Token
-                      3: Generate new JWT Token by changing the algorithm of the input JWT to 'None'
-                      4: Generate new JWT Token by changing the algorithm of the input JWT to 'HS256'
-                      5: Generate new JWT Token by changing the algorithm of the input JWT to 'HS384'
-                      6: Generate new JWT Token by changing the algorithm of the input JWT to 'HS512'
-                      7: Quit
-                      Please enter your choice: """+f"{bcolors.ENDC}")
-        print (f"{bcolors.BOLD}***********************************************************************************************************{bcolors.ENDC}")
+            *****************************MAIN MENU*****************************
+            1: Detect the algorithm of the input JWT Token
+            2: Base64 decode the input JWT Token
+            3: Generate new JWT Token by changing the algorithm to 'None'
+            4: Generate new JWT Token by changing the algorithm to 'HS256'
+            5: Generate new JWT Token by changing the algorithm to 'HS384'
+            6: Generate new JWT Token by changing the algorithm to 'HS512'
+            7: Quit
+            *******************************************************************
+            Please enter your choice: """+f"{bcolors.ENDC}")
+        
 
 #######################################################################################
 #Detect the algorithm of the input JWT Token

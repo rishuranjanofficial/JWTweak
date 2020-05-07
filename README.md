@@ -18,8 +18,11 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 - Generate new JWT Token by changing the algorithm of the input JWT to 'HS384' 
 - Generate new JWT Token by changing the algorithm of the input JWT to 'HS512'    
 
+##
+
 ![jwtweak](https://user-images.githubusercontent.com/51092706/81257713-9ed91900-9051-11ea-9db1-23ba2ea5b22a.png)
 
+##
 
 ## Read where it can help
 - [JWT Attack Walk-Through-NCC Group](https://www.nccgroup.trust/uk/about-us/newsroom-and-events/blogs/2019/january/jwt-attack-walk-through/)
