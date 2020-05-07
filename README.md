@@ -9,6 +9,9 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 - Python 3
 - Valid JWT Token
 
+
+
+
 ## Features
 - Detects the algorithm of the input JWT Token 
 - Base64 decode the input JWT Token 
@@ -22,7 +25,8 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 - [Hack the JWT Token-Habr](https://habr.com/en/post/450054/)
 
 ## Please connect, if you have any query, suggestion or feedback.
-[![](https://static-exp1.licdn.com/sc/h/95o6rrc5ws6mlw6wqzy0xgj7y)](https://www.linkedin.com/in/rishuranjan/) 
+[![](https://img.shields.io/twitter/follow/tweetit_rrj?style=social)](https://twitter.com/intent/follow?screen_name=tweetit_rrj)  
 
-[![](https://img.shields.io/twitter/follow/tweetit_rrj?style=social)](https://twitter.com/intent/follow?screen_name=tweetit_rrj)
+
+[![](https://static-exp1.licdn.com/sc/h/95o6rrc5ws6mlw6wqzy0xgj7y)](https://www.linkedin.com/in/rishuranjan/)
 
