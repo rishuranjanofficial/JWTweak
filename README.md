@@ -22,7 +22,7 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 
 ![jwtweak](https://user-images.githubusercontent.com/51092706/81257713-9ed91900-9051-11ea-9db1-23ba2ea5b22a.png)
 
-
+## Download Link - [JWTweak.py](https://rishuranjanofficial.github.io/JWTweak/JWTweak.py)
 ## Read where it can help
 - [JWT Attack Walk-Through-NCC Group](https://www.nccgroup.trust/uk/about-us/newsroom-and-events/blogs/2019/january/jwt-attack-walk-through/)
 - [Hack the JWT Token-Habr](https://habr.com/en/post/450054/)
