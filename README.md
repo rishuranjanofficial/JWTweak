@@ -27,7 +27,7 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 - [JWT Attack Walk-Through-NCC Group](https://www.nccgroup.trust/uk/about-us/newsroom-and-events/blogs/2019/january/jwt-attack-walk-through/)
 - [Hack the JWT Token-Habr](https://habr.com/en/post/450054/)
 
-## Please connect to the Author, if you have any query, suggestion or feedback.
+## Please connect, if you have any query, suggestion or feedback.
 
 > **Rishu Ranjan**
 
