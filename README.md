@@ -1,5 +1,4 @@
 # JWTweak
-[![GitHub issues](https://img.shields.io/github/issues/rishuranjanofficial/JWTweak?label=Contribution&style=social)](https://github.com/rishuranjanofficial/JWTweak/issues)
 [![GitHub forks](https://img.shields.io/github/forks/rishuranjanofficial/JWTweak?style=social)](https://github.com/rishuranjanofficial/JWTweak/network)
 [![GitHub stars](https://img.shields.io/github/stars/rishuranjanofficial/JWTweak?style=social)](https://github.com/rishuranjanofficial/JWTweak/stargazers)
 
@@ -28,7 +27,9 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 - [JWT Attack Walk-Through-NCC Group](https://www.nccgroup.trust/uk/about-us/newsroom-and-events/blogs/2019/january/jwt-attack-walk-through/)
 - [Hack the JWT Token-Habr](https://habr.com/en/post/450054/)
 
-## Please connect, if you have any query, suggestion or feedback.
+## If you have any query, suggestion or feedback.
+[![GitHub issues](https://img.shields.io/github/issues/rishuranjanofficial/JWTweak?label=Contribution&style=social)](https://github.com/rishuranjanofficial/JWTweak/issues)
 
-### Rishu Ranjan   
+## Author
+**Rishu Ranjan**   
 > [![](https://img.shields.io/twitter/follow/tweetit_rrj?style=social)](https://twitter.com/intent/follow?screen_name=tweetit_rrj)   [![](https://static-exp1.licdn.com/sc/h/95o6rrc5ws6mlw6wqzy0xgj7y)](https://www.linkedin.com/in/rishuranjan/)
