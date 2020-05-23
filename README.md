@@ -1,5 +1,6 @@
 # JWTweak
-[![GitHub issues](https://img.shields.io/github/issues/rishuranjanofficial/JWTweak?label=Contribution&style=plastic)](https://github.com/rishuranjanofficial/JWTweak/issues)[![GitHub Forks](https://img.shields.io/github/issues/rishuranjanofficial/JWTweak?label=Forks&style=plastic)](https://github.com/rishuranjanofficial/JWTweak/fork)
+[![GitHub issues](https://img.shields.io/github/issues/rishuranjanofficial/JWTweak?label=Contribution&style=plastic)](https://github.com/rishuranjanofficial/JWTweak/issues)
+[![GitHub forks](https://img.shields.io/github/forks/rishuranjanofficial/JWTweak?style=social)](https://github.com/rishuranjanofficial/JWTweak/network)
 [![GitHub stars](https://img.shields.io/github/stars/rishuranjanofficial/JWTweak?style=social)](https://github.com/rishuranjanofficial/JWTweak/stargazers)
 
 ## Introduction
