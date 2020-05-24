@@ -12,13 +12,13 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 ## Features
 - Detects the algorithm of the input JWT Token 
 - Base64 decode the input JWT Token 
-- Generate new JWT Token by changing the algorithm of the input JWT to 'None' 
-- Generate new JWT Token by changing the algorithm of the input JWT to 'HS256' 
-- Generate new JWT Token by changing the algorithm of the input JWT to 'HS384' 
-- Generate new JWT Token by changing the algorithm of the input JWT to 'HS512'  
-- Generate new JWT Token by changing the algorithm of the input JWT to 'RS256' 
-- Generate new JWT Token by changing the algorithm of the input JWT to 'RS384' 
-- Generate new JWT Token by changing the algorithm of the input JWT to 'RS512'   
+- Generate new JWT by changing the algorithm of the input JWT to 'None' 
+- Generate new JWT by changing the algorithm of the input JWT to 'HS256' 
+- Generate new JWT by changing the algorithm of the input JWT to 'HS384' 
+- Generate new JWT by changing the algorithm of the input JWT to 'HS512'  
+- Generate new JWT by changing the algorithm of the input JWT to 'RS256' 
+- Generate new JWT by changing the algorithm of the input JWT to 'RS384' 
+- Generate new JWT by changing the algorithm of the input JWT to 'RS512'   
 
 ## Download Link 
 **[JWTweak.py](https://rishuranjanofficial.github.io/JWTweak/JWTweak.py)**

@@ -39,13 +39,13 @@ def jwtWeak():
             *****************************MAIN MENU*****************************
             1: Detect the algorithm of the input JWT Token
             2: Base64 decode the input JWT Token
-            3: Generate new JWT Token by changing the algorithm to 'None'
-            4: Generate new JWT Token by changing the algorithm to 'HS256'
-            5: Generate new JWT Token by changing the algorithm to 'HS384'
-            6: Generate new JWT Token by changing the algorithm to 'HS512'
-            7: Generate new JWT Token by changing the algorithm to 'RS256'
-            8: Generate new JWT Token by changing the algorithm to 'RS384'
-            9: Generate new JWT Token by changing the algorithm to 'RS512'
+            3: Generate new JWT by changing the algorithm to 'None'
+            4: Generate new JWT by changing the algorithm to 'HS256'
+            5: Generate new JWT by changing the algorithm to 'HS384'
+            6: Generate new JWT by changing the algorithm to 'HS512'
+            7: Generate new JWT by changing the algorithm to 'RS256'
+            8: Generate new JWT by changing the algorithm to 'RS384'
+            9: Generate new JWT by changing the algorithm to 'RS512'
             10: Quit
             *******************************************************************
             Please enter your choice: """+f"{bcolors.ENDC}")
