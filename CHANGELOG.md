@@ -17,3 +17,7 @@
 ### Feature
 - Generate new JWT Token by changing algorthim to `RS256/384/512`
 - Generate Public and Private key pair, if not provided as input for signing
+
+## Version-1.5.1 (30-May-2020)
+### Feature
+- Bug fixes

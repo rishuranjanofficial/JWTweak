@@ -1,4 +1,4 @@
-#JWTweak-v1.5
+#JWTweak-v1.5.1
 
 import os
 import jwt
@@ -31,7 +31,7 @@ def jwtWeak():
     print("Enter the JWT Token:")
     in_jwt = input()
 
-    if re.match(r'^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$',in_jwt):
+    if re.match(r'^ey[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$',in_jwt):
         print(f"{bcolors.OKGREEN}\nThis is a valid input JWT Token{bcolors.ENDC}")
         print(f"{bcolors.BOLD}")
 
