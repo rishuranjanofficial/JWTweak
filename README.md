@@ -7,7 +7,6 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 ## Requirements
 - Python 3 (tested and working fine in python-3.7.7/Kali and python-3.8.2/Windows 10)
 - pip3 install pycryptodomex
-- Valid JWT Token
 
 ## Features
 - Detects the algorithm of the input JWT Token 
