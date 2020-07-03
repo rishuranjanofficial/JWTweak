@@ -11,7 +11,7 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 ## Features
 - Detects the algorithm of the input JWT Token 
 - Base64 decode the input JWT Token 
-- Generate new JWT by changing the algorithm of the input JWT to 'None' 
+- Generate new JWT by changing the algorithm of the input JWT to 'none' 
 - Generate new JWT by changing the algorithm of the input JWT to 'HS256' 
 - Generate new JWT by changing the algorithm of the input JWT to 'HS384' 
 - Generate new JWT by changing the algorithm of the input JWT to 'HS512'  

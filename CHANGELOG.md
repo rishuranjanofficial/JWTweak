@@ -21,3 +21,7 @@
 ## Version-1.5.1 (30-May-2020)
 ### Feature
 - Bug fixes
+
+## Version-1.6 (03-July-2020)
+### Feature
+- Bug fixes
