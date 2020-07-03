@@ -23,7 +23,7 @@ With the global increase in JSON Web Token (JWT) usage, the attack surface has a
 **[JWTweak.py](https://rishuranjanofficial.github.io/JWTweak/JWTweak.py)**
 
 ## POC
-![jwtweak](https://user-images.githubusercontent.com/51092706/82747950-93108500-9dbb-11ea-9d8f-fcd08a1f10be.png)
+![jwtweak](https://user-images.githubusercontent.com/51092706/86468710-9fdaae00-bd55-11ea-8272-8169ee29d431.png)
 
 ## Issues and Suggestions
 [![GitHub issues](https://img.shields.io/github/issues/rishuranjanofficial/JWTweak?label=Contribution&style=social)](https://github.com/rishuranjanofficial/JWTweak/issues)
