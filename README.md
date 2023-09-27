@@ -2,7 +2,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/rishuranjanofficial/JWTweak?logoColor=blue&style=social)](https://github.com/rishuranjanofficial/JWTweak/stargazers)   [![GitHub forks](https://img.shields.io/github/forks/rishuranjanofficial/JWTweak?logoColor=blue&style=social)](https://github.com/rishuranjanofficial/JWTweak/network)
 
 ## Introduction
-With the global increase in JSON Web Token (JWT) usage, the attack surface has also increased significantly. Having said that, this utility is designed with the aim to generate the new JWT token with little or no time which would help security enthusiasts to find security flaws in JWT implementation. This tool is designed to automate the process of modifying the JWT algorithm of input JWT Token and then generate the new JWT based on the new algorithm.
+With the global increase in JSON Web Token (JWT) usage, the attack surface has also increased significantly. Having said that, this utility is designed with the aim to generate the new JWT token with little or no time which would help security enthusiasts to find security flaws in JWT implementation like Algorithm confusion attacks. This tool is designed to automate the process of modifying the JWT algorithm of input JWT Token and then generate the new JWT based on the new algorithm.
 
 ## Requirements
 - Python 3 (tested and working fine in python-3.7.7/Kali and python-3.8.2/Windows 10)
