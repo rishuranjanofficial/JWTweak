@@ -1,0 +1,2 @@
+PyJWT>=2.7.0
+cryptography>=42.0.0
