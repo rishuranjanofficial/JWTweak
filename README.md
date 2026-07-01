@@ -3,81 +3,53 @@
 [![GitHub stars](https://img.shields.io/github/stars/rishuranjanofficial/JWTweak?logoColor=blue&style=social)](https://github.com/rishuranjanofficial/JWTweak/stargazers)   [![GitHub forks](https://img.shields.io/github/forks/rishuranjanofficial/JWTweak?logoColor=blue&style=social)](https://github.com/rishuranjanofficial/JWTweak/network)
 
 ## Introduction
-With the global increase in JSON Web Token (JWT) usage, the JWT attack surface has grown well beyond the classic `alg` switch. **JWTweak v2.0** is a JWT security‑testing toolkit that detects the algorithm of an input token, analyses it for risky configuration, and generates forged or tampered tokens across a wide range of modern attack classes — so you can quickly check how a target validates (or fails to validate) its JWTs.
+**JWTweak** is a guided, fully-offline JWT security-testing toolkit. It detects the algorithm of an input token, analyses it for risky configuration, recommends the attacks that fit, and walks you through each one - no flags to memorise.
 
-It runs as an **interactive menu** for exploration and as a **scriptable CLI** for automation and pipelines.
+Just run it:
 
-> ⚠️ **For authorised security testing and research only.** Only test systems you own or have explicit permission to assess.
+```bash
+python3 JWTweak.py
+```
 
-## What's new in v2.0
-- **Algorithm confusion (RS/EC → HS)** done correctly with manual HMAC signing, so it works against modern libraries that block public keys as HMAC secrets.
-- **Key‑resolution header injection**: `jwk` (CVE‑2018‑0114), `jku` (attacker‑hosted JWKS), `x5u` / `x5c` (attacker certificate).
-- **`kid` injection**: path traversal (`/dev/null` → empty key), SQL injection, command‑injection probes.
-- **Claim tampering**: drop/extend `exp`, escalate `role`/`admin`, edit or replace any claim.
-- **HMAC secret brute‑force** with a wordlist (offline secret cracking).
-- **Modern algorithms** for re‑signing: `HS256/384/512`, `RS*`, `PS*`, `ES256/384/512`, `EdDSA`.
-- **`alg:none` casing variants** (`none`, `None`, `NONE`, `nOnE`) and signature stripping/bit‑flip.
-- **Risk analysis** of the input token (flags `none`, weak HMAC, `jku`/`jwk`/`x5u`/`kid`, missing/expired `exp`, …).
-- **Full attack suite** that emits every candidate token to a file for use in Burp/Repeater or a fuzzer.
-- Reworked **UX**: grouped looping menu, colour output (auto‑disabled when piped or via `--no-color`), token from string/file/stdin, and a full `argparse` CLI.
-- Fixed compatibility with **PyJWT 2.x** (the previous `.decode('utf')` call no longer exists) and migrated key/cert handling to the maintained **`cryptography`** library.
+Paste a token, and JWTweak decodes it, shows a risk report, and presents a smart menu with the relevant attacks highlighted. Every attack runs **100% offline** - nothing is ever sent over the network.
+
+> ⚠️ **For authorised security testing and research only.**
+
+## Highlights
+- **Zero flags.** Run it, paste a token, follow the menu. Nothing to look up.
+- **Fully offline.** No attack makes a network call. `jku`/`x5u` artifacts are generated locally, and JWTweak can even spin up a **built-in local web server** so you can host them without any external service.
+- **Smart & guided.** Auto-decodes, runs a risk analysis, and marks the attacks that make sense for *your* token as *recommended*.
+- **Polished TUI** via [`rich`](https://github.com/Textualize/rich) - panels, syntax-highlighted JSON, a risk table, and a live cracking progress bar. Falls back to a clean plain-text UI automatically if `rich` isn't installed.
+
+## Attack coverage
+| Area | What it does |
+| --- | --- |
+| Recon | decode + risk analysis |
+| Signature / algorithm | `alg:none` variants, algorithm confusion (RS/ES → HMAC), re-sign with `HS/RS/PS/ES/EdDSA`, signature strip / bit-flip |
+| Key-resolution headers | `jwk` (CVE-2018-0114), `jku`, `x5u`, `x5c` injection - with optional built-in local hosting |
+| Claims / keys | `kid` path traversal / SQLi / command injection, interactive claim tampering, offline HMAC secret cracking |
+| Automation | one-tap "recommended suite" that writes every applicable token to a file |
 
 ## Requirements
 - Python 3.8+
-- `pip install -r requirements.txt`  (PyJWT and cryptography)
+- `pip install -r requirements.txt`
+
+`PyJWT` and `cryptography` are required; `rich` is optional (recommended) and only affects presentation.
 
 ## Usage
+Normally you never pass anything:
 
-### Interactive
 ```bash
 python3 JWTweak.py
-# or pass a token / file up front
-python3 JWTweak.py -t eyJhbG...        # token string
-python3 JWTweak.py -t token.jwt        # file containing a token
 ```
 
-### Non‑interactive (scriptable)
+For convenience you can pre-load a token or file, or force the plain UI:
+
 ```bash
-# Decode and risk-analyse
-python3 JWTweak.py -t token.jwt --decode
-
-# alg:none variants
-python3 JWTweak.py -t token.jwt --attack none
-
-# Algorithm confusion using the target's public key
-python3 JWTweak.py -t token.jwt --attack confusion --public-key pub.pem
-
-# Embed an attacker key in the jwk header (CVE-2018-0114)
-python3 JWTweak.py -t token.jwt --attack jwk
-
-# jku / x5u injection (point at a host you control)
-python3 JWTweak.py -t token.jwt --attack jku --jku https://you.example/jwks.json
-python3 JWTweak.py -t token.jwt --attack x5 --x5u https://you.example/cert.pem
-
-# kid path traversal / SQLi / command-injection probes
-python3 JWTweak.py -t token.jwt --attack kid --injected-key mykey
-
-# Tamper claims, then re-sign as needed
-python3 JWTweak.py -t token.jwt --attack tamper --set-claim role=admin --set-claim isAdmin=true
-python3 JWTweak.py -t token.jwt --attack resign --alg ES256
-
-# Crack a weak HMAC secret
-python3 JWTweak.py -t token.jwt --attack crack --wordlist rockyou.txt
-
-# Run the whole battery and save every candidate token
-python3 JWTweak.py -t token.jwt --attack suite --public-key pub.pem -o tokens.txt
+python3 JWTweak.py eyJhbG...              # start with a token
+python3 JWTweak.py token.jwt              # start with a file
+python3 JWTweak.py --no-rich --no-color   # plain-text UI
 ```
-
-## Attack coverage
-| Area | Options |
-| --- | --- |
-| Recon | decode + risk analysis |
-| Signature / algorithm | `alg:none` variants, algorithm confusion, re‑sign (HS/RS/PS/ES/EdDSA), signature strip / bit‑flip |
-| Key‑resolution headers | `jwk`, `jku`, `x5u`, `x5c` injection |
-| Key ID | `kid` path traversal, SQLi, command‑injection |
-| Claims | drop/extend `exp`, role/admin escalation, arbitrary claim edits |
-| Cracking | HMAC secret brute‑force (wordlist) |
-| Automation | full attack suite → file |
 
 ## Author
 **Rishu Ranjan**
