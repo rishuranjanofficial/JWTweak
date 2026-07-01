@@ -1,1 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+
+# macOS
 .DS_Store
+
+# JWTweak output
+jwtweak_tokens.txt
+
+# PoC lab - throwaway secrets, generated on first run. NEVER commit private keys.
+poc/private_key.pem
+poc/public_key.pem
+poc/user_token.txt
