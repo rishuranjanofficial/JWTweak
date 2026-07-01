@@ -77,6 +77,12 @@ class _AnsiFallback:
         if title:
             print(f"{self._C.BOLD}{title}{self._C.E}")
 
+    def banner(self, block, plain, tagline, meta, legal):
+        print(f"{self._C.B}{self._C.BOLD}{plain}{self._C.E}")
+        print(f"    {self._C.BOLD}{tagline}{self._C.E}")
+        print(f"    {self._C.D}{meta}{self._C.E}")
+        print(f"    {self._C.Y}{legal}{self._C.E}")
+
     def print(self, msg=""):
         print(msg)
 
@@ -106,12 +112,13 @@ class _AnsiFallback:
     def menu(self, title, groups, footer=""):
         self.rule(title)
         for gname, items in groups:
-            print(f"\n{self._C.BOLD}{gname}{self._C.E}")
+            print(f"\n{self._C.BOLD}{gname.upper()}{self._C.E}")
             for key, label, desc, rec in items:
-                star = f" {self._C.Y}(recommended){self._C.E}" if rec else ""
-                print(f"  {self._C.BOLD}{key:>2}{self._C.E}) {label}{star}")
-                if desc:
-                    print(f"      {self._C.D}{desc}{self._C.E}")
+                star = f" {self._C.Y}*{self._C.E}" if rec else ""
+                pad = "" if desc else ""
+                d = f"  {self._C.D}- {desc}{self._C.E}" if desc else ""
+                print(f"  {self._C.BOLD}{self._C.B}{key:>2}{self._C.E}) "
+                      f"{label}{star}{d}")
         if footer:
             print(f"\n{self._C.D}{footer}{self._C.E}")
 
@@ -146,6 +153,15 @@ class _RichUI:
 
     def rule(self, title=""):
         self.c.rule(f"[bold]{title}[/]" if title else "")
+
+    def banner(self, block, plain, tagline, meta, legal):
+        art = Text(block, style="bold cyan")
+        body = Text.assemble(art, "\n\n",
+                             (tagline, "bold white"), "\n",
+                             (meta, "dim"), "\n",
+                             (legal, "yellow"))
+        self.c.print(Panel(body, border_style="cyan", box=box.DOUBLE,
+                           padding=(0, 2), expand=False))
 
     def print(self, msg=""):
         self.c.print(msg)
@@ -185,18 +201,19 @@ class _RichUI:
         self.c.print(t)
 
     def menu(self, title, groups, footer=""):
-        t = Table(box=box.ROUNDED, show_header=False, expand=False,
-                  border_style="cyan", title=f"[bold cyan]{title}[/]")
-        t.add_column("k", justify="right", style="bold", no_wrap=True)
-        t.add_column("label")
+        t = Table(box=box.SQUARE, show_header=False, expand=False,
+                  border_style="grey37", padding=(0, 1),
+                  title=f"[bold cyan]{title}[/]", title_justify="left")
+        t.add_column("k", justify="center", style="bold cyan", no_wrap=True, width=3)
+        t.add_column("label", no_wrap=False)
         for gi, (gname, items) in enumerate(groups):
-            t.add_row("", f"[bold magenta]{gname}[/]")
-            for key, label, desc, rec in items:
-                star = "  [yellow]recommended[/]" if rec else ""
-                sub = f"\n   [dim]{desc}[/]" if desc else ""
-                t.add_row(f"[cyan]{key}[/]", f"{label}{star}{sub}")
-            if gi < len(groups) - 1:
+            if gi:
                 t.add_row("", "")
+            t.add_row("", f"[bold magenta]{gname.upper()}[/]")
+            for key, label, desc, rec in items:
+                badge = " [bold yellow]★[/]" if rec else ""
+                sub = f"  [dim]{desc}[/]" if desc else ""
+                t.add_row(f"[cyan]{key}[/]", f"[white]{label}[/]{badge}{sub}")
         self.c.print(t)
         if footer:
             self.c.print(f"[dim]{footer}[/]")
@@ -549,10 +566,26 @@ def serve_file(filename, content, port=8000):
 # --------------------------------------------------------------------------- #
 #  Guided interactive flows
 # --------------------------------------------------------------------------- #
-BANNER = r"""     ____   _    _  _____                   _
-    |_  /| | | |__|_   _|_ __ _____ __ _ | |__
-     / / | |/\| |  | | \ V  V / -_) _` || / /
-    /___| \_/\_/   |_|  \_/\_/\___\__,_||_\_\ """
+BANNER_BLOCK = (
+    "     ██╗██╗    ██╗████████╗██╗    ██╗███████╗ █████╗ ██╗  ██╗\n"
+    "     ██║██║    ██║╚══██╔══╝██║    ██║██╔════╝██╔══██╗██║ ██╔╝\n"
+    "     ██║██║ █╗ ██║   ██║   ██║ █╗ ██║█████╗  ███████║█████╔╝ \n"
+    "██   ██║██║███╗██║   ██║   ██║███╗██║██╔══╝  ██╔══██║██╔═██╗ \n"
+    "╚█████╔╝╚███╔███╔╝   ██║   ╚███╔███╔╝███████╗██║  ██║██║  ██╗\n"
+    " ╚════╝  ╚══╝╚══╝    ╚═╝    ╚══╝╚══╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝"
+)
+
+BANNER_PLAIN = (
+    "     ___        _______                    _\n"
+    "    | \\ \\      / /_   _|_      _____  __ _| | __\n"
+    " _  | |\\ \\ /\\ / /  | | \\ \\ /\\ / / _ \\/ _` | |/ /\n"
+    "| |_| | \\ V  V /   | |  \\ V  V /  __/ (_| |   <\n"
+    " \\___/   \\_/\\_/    |_|   \\_/\\_/ \\___|\\__,_|_|\\_\\"
+)
+
+TAGLINE = "JSON Web Token security testing toolkit"
+META = f"v{__version__}  ·  100% offline  ·  github.com/rishuranjanofficial/JWTweak"
+LEGAL = "For authorised security testing and research only."
 
 
 class App:
@@ -841,9 +874,7 @@ class App:
         ]
 
     def run(self, initial_token=None):
-        self.ui.print(f"[bold cyan]{BANNER}[/]" if isinstance(self.ui, _RichUI)
-                      else BANNER)
-        self.ui.print(f"    v{__version__}  -  100% offline JWT testing\n")
+        self.ui.banner(BANNER_BLOCK, BANNER_PLAIN, TAGLINE, META, LEGAL)
         self.load_token(initial_token)
         self.show_overview()
         dispatch = {"1": self.flow_decode, "2": self.flow_none,
@@ -892,6 +923,9 @@ def main(argv=None):
         print("Usage: python3 JWTweak.py [token-or-file] "
               "[--no-color] [--no-rich]")
         print("No options needed - just run it and follow the menu.")
+        return
+    if "-V" in argv or "--version" in argv:
+        print(f"JWTweak {__version__}")
         return
     ui = make_ui(color=color, prefer_rich=prefer_rich)
     try:
