@@ -77,8 +77,15 @@ class _AnsiFallback:
         if title:
             print(f"{self._C.BOLD}{title}{self._C.E}")
 
-    def banner(self, block, plain, tagline, meta, legal):
-        print(f"{self._C.B}{self._C.BOLD}{plain}{self._C.E}")
+    def banner(self, *_ignored):
+        import shutil
+        width = shutil.get_terminal_size((80, 24)).columns
+        art, tagline, meta, legal, _ = choose_banner(width)
+        if art:
+            print(f"{self._C.B}{self._C.BOLD}{art}{self._C.E}")
+        else:
+            print(f"{self._C.B}{self._C.BOLD}JWTweak{self._C.E} "
+                  f"{self._C.D}v{__version__}{self._C.E}")
         print(f"    {self._C.BOLD}{tagline}{self._C.E}")
         print(f"    {self._C.D}{meta}{self._C.E}")
         print(f"    {self._C.Y}{legal}{self._C.E}")
@@ -160,14 +167,18 @@ class _RichUI:
     def rule(self, title=""):
         self.c.rule(f"[bold]{title}[/]" if title else "")
 
-    def banner(self, block, plain, tagline, meta, legal):
-        art = Text(block, style="bold cyan")
-        body = Text.assemble(art, "\n\n",
-                             (tagline, "bold white"), "\n",
-                             (meta, "dim"), "\n",
-                             (legal, "yellow"))
-        self.c.print(Panel(body, border_style="cyan", box=box.DOUBLE,
-                           padding=(0, 2), expand=False))
+    def banner(self, *_ignored):
+        art, tagline, meta, legal, wide = choose_banner(self.c.width)
+        if art:
+            head = [Text(art, style="bold cyan"), "\n\n"]
+        else:
+            head = [Text.assemble(("JWTweak ", "bold cyan"),
+                                  (f"v{__version__}", "dim")), "\n"]
+        body = Text.assemble(*head, (tagline, "bold white"), "\n",
+                             (meta, "dim"), "\n", (legal, "yellow"))
+        self.c.print(Panel(body, border_style="cyan",
+                           box=box.DOUBLE if wide else box.SQUARE,
+                           padding=(0, 2 if wide else 1), expand=False))
 
     def print(self, msg=""):
         self.c.print(msg)
@@ -584,25 +595,44 @@ def serve_file(filename, content, port=8000):
 #  Guided interactive flows
 # --------------------------------------------------------------------------- #
 BANNER_BLOCK = (
-    "     ██╗██╗    ██╗████████╗██╗    ██╗███████╗ █████╗ ██╗  ██╗\n"
-    "     ██║██║    ██║╚══██╔══╝██║    ██║██╔════╝██╔══██╗██║ ██╔╝\n"
-    "     ██║██║ █╗ ██║   ██║   ██║ █╗ ██║█████╗  ███████║█████╔╝ \n"
-    "██   ██║██║███╗██║   ██║   ██║███╗██║██╔══╝  ██╔══██║██╔═██╗ \n"
-    "╚█████╔╝╚███╔███╔╝   ██║   ╚███╔███╔╝███████╗██║  ██║██║  ██╗\n"
-    " ╚════╝  ╚══╝╚══╝    ╚═╝    ╚══╝╚══╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝"
+    "██████╗  ██╗    ██╗████████╗██╗    ██╗███████╗ █████╗ ██╗  ██╗\n"
+    "╚═██╔═╝  ██║    ██║╚══██╔══╝██║    ██║██╔════╝██╔══██╗██║ ██╔╝\n"
+    "  ██║    ██║ █╗ ██║   ██║   ██║ █╗ ██║█████╗  ███████║█████╔╝ \n"
+    "██ ██║   ██║███╗██║   ██║   ██║███╗██║██╔══╝  ██╔══██║██╔═██╗ \n"
+    "╚███╔╝   ╚███╔███╔╝   ██║   ╚███╔███╔╝███████╗██║  ██║██║  ██╗\n"
+    " ╚══╝     ╚══╝╚══╝    ╚═╝    ╚══╝╚══╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝"
 )
 
 BANNER_PLAIN = (
-    "     ___        _______                    _\n"
-    "    | \\ \\      / /_   _|_      _____  __ _| | __\n"
-    " _  | |\\ \\ /\\ / /  | | \\ \\ /\\ / / _ \\/ _` | |/ /\n"
-    "| |_| | \\ V  V /   | |  \\ V  V /  __/ (_| |   <\n"
-    " \\___/   \\_/\\_/    |_|   \\_/\\_/ \\___|\\__,_|_|\\_\\"
+    "   ___  _    _ _____                  _\n"
+    "  |_  || |  | |_   _|                | |\n"
+    "    | || |  | | | |_      _____  __ _| | __\n"
+    "    | || |/\\| | | \\ \\ /\\ / / _ \\/ _` | |/ /\n"
+    "/\\__/ /\\  /\\  / | |\\ V  V /  __/ (_| |   <\n"
+    "\\____/  \\/  \\/  \\_/ \\_/\\_/ \\___|\\__,_|_|\\_\\"
 )
 
 TAGLINE = "JSON Web Token security testing toolkit"
 META = f"v{__version__}  ·  100% offline  ·  github.com/rishuranjanofficial/JWTweak"
 LEGAL = "For authorised security testing and research only."
+
+TAGLINE_SHORT = "JWT security testing toolkit"
+META_SHORT = f"v{__version__}  ·  100% offline"
+LEGAL_SHORT = "Authorised testing only."
+
+
+def choose_banner(width):
+    """Pick art + text sized to the terminal width so nothing overflows.
+
+    Uses ASCII-only art (renders identically in every terminal font;
+    Unicode block art looks fragmented in many fonts).
+    Returns (art_or_None, tagline, meta, legal, wide_box).
+    """
+    if width >= 70:
+        return BANNER_PLAIN, TAGLINE, META, LEGAL, True
+    if width >= 50:
+        return BANNER_PLAIN, TAGLINE, META_SHORT, LEGAL_SHORT, True
+    return None, TAGLINE_SHORT, META_SHORT, LEGAL_SHORT, False
 
 
 class App:
@@ -897,7 +927,7 @@ class App:
         ]
 
     def run(self, initial_token=None):
-        self.ui.banner(BANNER_BLOCK, BANNER_PLAIN, TAGLINE, META, LEGAL)
+        self.ui.banner()
         self.load_token(initial_token)
         self.show_overview()
         dispatch = {"1": self.flow_decode, "2": self.flow_none,
