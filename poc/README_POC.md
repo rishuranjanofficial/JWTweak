@@ -57,8 +57,8 @@ python3 JWTweak.py user_token.txt
 ```
 In the menu:
 1. `a`  (Claim tampering)
-2. `c`  (make admin)
-3. `s`  (finish editing)
+2. `1`  (escalate to admin)
+3. `0`  (done editing)
 4. `y`  (apply changes to the working token)
 5. `n`  (emit an alg:none copy)
 
@@ -77,7 +77,7 @@ curl -s http://127.0.0.1:5000/public_key.pem -o public_key.pem
 python3 JWTweak.py user_token.txt
 ```
 In the menu:
-1. `a` -> `c` -> `s` -> `y` -> `skip`   (escalate to admin, no signed copy yet)
+1. `a` -> `1` -> `0` -> `y` -> `skip`   (escalate to admin, no signed copy yet)
 2. `3`  (Algorithm confusion)
 3. paste `public_key.pem` when asked for the target public key
 

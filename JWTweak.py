@@ -799,34 +799,37 @@ class App:
         p = dict(self.payload)
         while True:
             self.ui.panel(self._json_str(p), title="Working payload", style="cyan")
-            choice = self.ui.ask(
-                "  [a] remove exp   [b] exp=+10y   [c] make admin   "
-                "[d] set a claim   [e] replace JSON   [s] sign/finish", default="s")
+            self.ui.print("  Claim editor:")
+            self.ui.print("    1) Escalate to admin   2) Remove exp   "
+                          "3) Extend exp (+10y)")
+            self.ui.print("    4) Set a claim         5) Replace JSON   "
+                          "0) Done editing")
+            choice = self.ui.ask("  edit", default="0")
             far = int((datetime.datetime.now(datetime.timezone.utc)
                        + datetime.timedelta(days=3650)).timestamp())
-            if choice == "a":
-                p.pop("exp", None)
-            elif choice == "b":
-                p["exp"] = far
-            elif choice == "c":
+            if choice == "1":
                 p.update({"role": "admin", "admin": True, "isAdmin": True})
-            elif choice == "d":
+            elif choice == "2":
+                p.pop("exp", None)
+            elif choice == "3":
+                p["exp"] = far
+            elif choice == "4":
                 key = self.ui.ask("Claim key")
                 val = self.ui.ask('Value (JSON, e.g. "admin" or 1 or true)')
                 try:
                     p[key] = json.loads(val)
                 except Exception:
                     p[key] = val
-            elif choice == "e":
+            elif choice == "5":
                 raw = self.ui.ask("Paste full JSON payload")
                 try:
                     p = json.loads(raw)
                 except Exception as e:
                     self.ui.error(f"Invalid JSON: {e}")
-            elif choice == "s":
+            elif choice in ("0", ""):
                 break
             else:
-                break
+                self.ui.warn("Pick 1-5 to edit, or 0 when done.")
         # Commit the edited claims to the working session so subsequent
         # attacks (confusion, resign, jwk, jku, ...) operate on them too.
         if self.ui.confirm("Apply these claim changes to the working token "
