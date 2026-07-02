@@ -28,6 +28,22 @@ Save it to a file if you want to load it into JWTweak directly:
 curl -s -X POST http://127.0.0.1:5000/login | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])" > user_token.txt
 ```
 
+
+## Browser PoC (recommended for screenshots)
+
+The demo now ships a polished web console, so your PoC looks like a real app
+being exploited:
+
+1. Open **http://127.0.0.1:5000** and click **Sign in** (demo credentials are
+   prefilled). You land on a dashboard showing your session token and
+   **role: user**.
+2. Click **Open Admin Console** &mdash; you get a styled **403 Access denied**.
+3. Forge an admin token with JWTweak (see the attacks below), copy it, paste it
+   into the **Session token** box on the dashboard, and click **Open Admin
+   Console** again &mdash; you now see the **Admin Console** with the flag.
+
+Everything below (curl) still works too, and is handy for automation.
+
 ## Baseline (should fail)
 ```bash
 TOKEN=$(cat user_token.txt)
