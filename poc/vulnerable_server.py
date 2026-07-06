@@ -71,7 +71,22 @@ PRIVATE_KEY, PUBLIC_KEY_PEM = _load_or_create_keys()
 PUBLIC_KEY = serialization.load_pem_public_key(PUBLIC_KEY_PEM)
 _HASHES = {"HS256": hashlib.sha256, "HS384": hashlib.sha384, "HS512": hashlib.sha512}
 BRAND = "Aegis Cloud"
-FLAG = "JWTweak{alg_confusion_and_none_win}"
+FLAG_NONE = "JWTweak{alg_none_signature_bypass}"
+FLAG_CONFUSION = "JWTweak{rs256_to_hs256_key_confusion}"
+FLAG_DEFAULT = "JWTweak{jwt_verification_bypassed}"
+
+
+def flag_for(token):
+    """Pick a flag based on HOW the token was forged (its alg header)."""
+    try:
+        alg = json.loads(b64url_decode(token.split(".")[0])).get("alg", "")
+    except Exception:
+        alg = ""
+    if alg.lower() == "none":
+        return FLAG_NONE
+    if alg in _HASHES:
+        return FLAG_CONFUSION
+    return FLAG_DEFAULT
 
 
 def b64url_decode(s):
@@ -307,7 +322,7 @@ Your token carries role <b>{claims.get('role')}</b>.</p>
 <a class="btn ghost" href="/dashboard">&larr; Back to dashboard</a></div>"""), 403
 
     if wants_json:
-        return jsonify(message="Welcome, admin!", flag=FLAG, claims=claims)
+        return jsonify(message="Welcome, admin!", flag=flag_for(token), claims=claims)
     return page("Admin Console", f"""
 <div class="card granted"><div class="big-ic" style="color:var(--ok)">&#9989;</div>
 <h1>Welcome to the Admin Console</h1>
@@ -319,7 +334,7 @@ with role <span class="badge admin">&#10003; admin</span></p>
   <li><span>Billing plan</span><span class="muted">Enterprise</span></li>
   <li><span>Master API secret</span><span class="muted">sk_live_9f3c…a71e</span></li>
 </ul>
-<div class="flag">FLAG: {FLAG}</div>
+<div class="flag">FLAG: {flag_for(token)}</div>
 <a class="btn ghost" href="/logout" style="margin-top:18px">Sign out</a></div>""")
 
 
